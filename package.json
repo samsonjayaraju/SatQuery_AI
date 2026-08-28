@@ -1,0 +1,14 @@
+{
+  "name": "satquery-ai",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/web", "packages/*"],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:api": "cd apps/api && ../../.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "build:web": "npm --workspace apps/web run build",
+    "lint:web": "npm --workspace apps/web run lint",
+    "typecheck:web": "npm --workspace apps/web exec tsc -- --noEmit",
+    "test:api": ".venv/bin/python -m pytest apps/api/tests"
+  }
+}
