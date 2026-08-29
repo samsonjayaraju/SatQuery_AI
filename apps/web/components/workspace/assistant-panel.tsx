@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Bot, Check, ChevronsUp, Download, LoaderCircle, MessageSquareText, Sparkles } from "lucide-react";
 import { FormEvent } from "react";
-import type { AnalysisResponse, AnalysisStatus, InputMode } from "@/lib/types";
+import type { AnalysisJob, AnalysisResponse, AnalysisStatus, InputMode } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 
 const prompts: Record<InputMode, string[]> = {
@@ -33,8 +33,10 @@ function readableStat(value: string | number, key: string) {
 export function AssistantPanel({
   mode,
   status,
+  job,
   query,
   result,
+  activeEvidence,
   canAnalyze,
   reportBusy,
   onQuery,
@@ -44,8 +46,10 @@ export function AssistantPanel({
 }: {
   mode: InputMode;
   status: AnalysisStatus;
+  job: AnalysisJob | null;
   query: string;
   result: AnalysisResponse | null;
+  activeEvidence: number;
   canAnalyze: boolean;
   reportBusy: boolean;
   onQuery: (query: string) => void;
@@ -53,6 +57,7 @@ export function AssistantPanel({
   onEvidence: (index: number) => void;
   onReport: () => void;
 }) {
+  const busy = ["queued", "validating", "loading_model", "processing", "integrating"].includes(status);
   function submit(event: FormEvent) {
     event.preventDefault();
     onAnalyze();
@@ -62,7 +67,7 @@ export function AssistantPanel({
     <aside className="assistant-panel">
       <div className="panel-heading">
         <div><span className="eyebrow">02 · SATQUERY AGENT</span><h1>Ask the landscape</h1></div>
-        <span className={`agent-status ${status === "processing" ? "busy" : ""}`}><span /> {status === "processing" ? "ANALYZING" : "READY"}</span>
+        <span className={`agent-status ${busy ? "busy" : ""}`}><span /> {busy ? status.replaceAll("_", " ").toUpperCase() : "READY"}</span>
       </div>
 
       {!result ? (
@@ -77,8 +82,8 @@ export function AssistantPanel({
               <button type="button" key={prompt} onClick={() => onQuery(prompt)}><span>{prompt}</span><ChevronsUp size={15} /></button>
             ))}
           </div>
-          {status === "processing" && (
-            <div className="processing-card"><LoaderCircle className="spin" size={20} /><div><b>Specialists are working</b><span>Validating · routing · extracting evidence</span></div></div>
+          {busy && (
+            <div className="processing-card"><LoaderCircle className="spin" size={20} /><div><b>{job?.message ?? "Preparing local analysis"}</b><span>{Math.round((job?.progress ?? 0) * 100)}% · {status.replaceAll("_", " ")}</span><i style={{ width: `${Math.round((job?.progress ?? 0) * 100)}%` }} /></div></div>
           )}
         </>
       ) : (
@@ -97,7 +102,7 @@ export function AssistantPanel({
             <div className="section-label"><span className="eyebrow">SPATIAL EVIDENCE</span><span>{result.evidence.length} LAYERS</span></div>
             <div className="evidence-list">
               {result.evidence.map((item, index) => (
-                <button type="button" key={item.id} onClick={() => onEvidence(index)}>
+                <button type="button" className={activeEvidence === index ? "active" : ""} aria-pressed={activeEvidence === index} key={item.id} onClick={() => onEvidence(index)}>
                   <i style={{ background: item.color }} /><span><b>{item.label}</b><small>{item.description}</small></span><Check size={13} />
                 </button>
               ))}
@@ -118,8 +123,8 @@ export function AssistantPanel({
       )}
 
       <form className="query-composer" onSubmit={submit}>
-        <textarea aria-label="Analysis question" placeholder={canAnalyze ? "Ask a question about the imagery…" : "Load valid imagery to begin…"} value={query} onChange={(event) => onQuery(event.target.value)} disabled={!canAnalyze || status === "processing"} />
-        <div><span><Sparkles size={13} /> Automatic routing</span><button type="submit" disabled={!canAnalyze || !query.trim() || status === "processing"}>{status === "processing" ? <LoaderCircle className="spin" size={16} /> : <MessageSquareText size={16} />} Analyze</button></div>
+        <textarea aria-label="Analysis question" placeholder={canAnalyze ? "Ask a question about the imagery…" : "Load valid imagery to begin…"} value={query} onChange={(event) => onQuery(event.target.value)} disabled={!canAnalyze || busy} />
+        <div><span><Sparkles size={13} /> Automatic routing</span><button type="submit" disabled={!canAnalyze || !query.trim() || busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MessageSquareText size={16} />} Analyze</button></div>
       </form>
     </aside>
   );

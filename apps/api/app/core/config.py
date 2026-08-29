@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 class Settings(BaseSettings):
+    project_root: Path = PROJECT_ROOT
     app_env: str = "development"
     backend_host: str = "127.0.0.1"
     backend_port: int = 8000

@@ -16,8 +16,11 @@ Built for Smart India Hackathon / ISRO–Department of Space problem statement *
 - Single-scene caption/VQA/grounding development flow backed by real pixel-derived land-cover evidence.
 - Bi-temporal pixel-change heatmap, overlay, class deltas and structured change reasoning.
 - Optical and SAR evidence extraction plus weighted SatFusion baseline and agreement confidence.
-- Leaflet `CRS.Simple` viewer with zoom, pan, fit, pair split, evidence selection and opacity.
-- Local JSON history, HTML report generation, health/models/history/benchmark routes.
+- Full-resolution overlapping tile inference with stitched outputs; browser previews are downsampled separately.
+- GeoTIFF pair reprojection onto a shared grid, with an explicit pixel-space fallback for unreferenced images.
+- Non-blocking local analysis jobs with progress polling and all required job states.
+- Leaflet `CRS.Simple` viewer with zoom, pan, fit, pair split/swipe, evidence selection, overlay toggle and opacity.
+- Local JSON history, HTML report generation, health/models/history/job/benchmark routes.
 - Frozen RemoteCLIP + trainable bottleneck adapter pipeline for BigEarthNet subsets.
 - Reusable evaluation metrics and deterministic synthetic demo imagery generator.
 
@@ -113,6 +116,7 @@ It writes `best.pt`, `latest.pt`, configuration, and measured training/validatio
 ```bash
 .venv/bin/python -m pytest apps/api/tests
 npm --workspace apps/web run lint
+npm --workspace apps/web run test
 npm --workspace apps/web run build
 ```
 

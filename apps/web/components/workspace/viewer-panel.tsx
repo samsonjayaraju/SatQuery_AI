@@ -3,7 +3,8 @@
 /* eslint-disable @next/next/no-img-element -- local object/analysis URLs are intentionally unoptimized */
 
 import dynamic from "next/dynamic";
-import { Layers3, Map, Maximize2, ScanSearch, SplitSquareHorizontal } from "lucide-react";
+import { Eye, EyeOff, Map, Maximize2, ScanSearch, SlidersHorizontal, SplitSquareHorizontal } from "lucide-react";
+import { useState } from "react";
 import type { AnalysisResponse, InspectionResponse } from "@/lib/types";
 import { assetUrl } from "@/lib/api";
 
@@ -16,10 +17,14 @@ export function ViewerPanel({
   overlayOpacity,
   activeImage,
   split,
+  compare,
+  overlayVisible,
   resetKey,
   onOpacity,
   onImage,
   onSplit,
+  onCompare,
+  onOverlay,
   onFit,
 }: {
   inspection: InspectionResponse | null;
@@ -28,18 +33,23 @@ export function ViewerPanel({
   overlayOpacity: number;
   activeImage: number;
   split: boolean;
+  compare: boolean;
+  overlayVisible: boolean;
   resetKey: number;
   onOpacity: (opacity: number) => void;
   onImage: (index: number) => void;
   onSplit: () => void;
+  onCompare: () => void;
+  onOverlay: () => void;
   onFit: () => void;
 }) {
+  const [comparisonPosition, setComparisonPosition] = useState(50);
   const current = result?.inspection ?? inspection;
   const images = current?.images ?? [];
   const base = images[activeImage] ?? images[0];
   const baseUrl = assetUrl(base?.thumbnail_url);
   const evidence = result?.evidence[activeEvidence];
-  const evidenceUrl = assetUrl(evidence?.asset_url);
+  const evidenceUrl = overlayVisible ? assetUrl(evidence?.asset_url) : null;
   const crs = base?.crs ?? "PIXEL SPACE";
 
   return (
@@ -48,8 +58,9 @@ export function ViewerPanel({
         <div><span className="status-dot" /> VIEWER / {base ? base.filename.toUpperCase() : "NO SCENE"}</div>
         <div>
           {images.length > 1 && <button type="button" className={split ? "active" : ""} onClick={onSplit}><SplitSquareHorizontal size={15} /> Split</button>}
+          {images.length > 1 && <button type="button" className={compare ? "active" : ""} onClick={onCompare}><SlidersHorizontal size={15} /> Swipe</button>}
           <button type="button" onClick={onFit}><Maximize2 size={14} /> Fit</button>
-          <button type="button"><Layers3 size={15} /> {result ? `${result.evidence.length} layers` : "Layers"}</button>
+          <button type="button" className={!overlayVisible ? "active" : ""} onClick={onOverlay} disabled={!result}>{overlayVisible ? <Eye size={15} /> : <EyeOff size={15} />} Overlay</button>
         </div>
       </div>
       {!baseUrl ? (
@@ -60,6 +71,14 @@ export function ViewerPanel({
           <p>Load a remote-sensing raster to inspect it, run specialist analysis and verify every answer spatially.</p>
           <div className="coordinate-readout">00° 00′ 00″ N&nbsp;&nbsp; / &nbsp;&nbsp;00° 00′ 00″ E</div>
         </div>
+      ) : compare && images.length > 1 ? (
+        <div className="comparison-view">
+          <img src={assetUrl(images[0].thumbnail_url) ?? ""} alt={images[0].filename} />
+          <div className="comparison-after" style={{ clipPath: `inset(0 0 0 ${comparisonPosition}%)` }}><img src={assetUrl(images[1].thumbnail_url) ?? ""} alt={images[1].filename} /></div>
+          <span className="comparison-divider" style={{ left: `${comparisonPosition}%` }} />
+          <input aria-label="Before and after comparison position" type="range" min="0" max="100" value={comparisonPosition} onChange={(event) => setComparisonPosition(Number(event.target.value))} />
+          <div className="comparison-labels"><span>BEFORE / INPUT 1</span><span>AFTER / INPUT 2</span></div>
+        </div>
       ) : split && images.length > 1 ? (
         <div className="split-view">
           {images.slice(0, 2).map((image, index) => (
@@ -68,7 +87,7 @@ export function ViewerPanel({
         </div>
       ) : (
         <div className="map-wrap">
-          <LeafletCanvas baseUrl={baseUrl} evidenceUrl={evidenceUrl} opacity={overlayOpacity} width={base.width} height={base.height} resetKey={resetKey} />
+          <LeafletCanvas baseUrl={baseUrl} evidenceUrl={evidenceUrl} opacity={overlayOpacity} width={base.display_width ?? base.width} height={base.display_height ?? base.height} resetKey={resetKey} />
           <div className="layer-tabs">
             {images.map((image, index) => <button className={activeImage === index ? "active" : ""} key={image.filename} type="button" onClick={() => onImage(index)}>{index === 0 ? "INPUT 1" : "INPUT 2"}</button>)}
             {result && <span><ScanSearch size={13} /> {evidence?.label ?? "Evidence"}</span>}

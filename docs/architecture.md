@@ -17,12 +17,17 @@ sequenceDiagram
     Web->>API: POST /files/inspect
     API->>Inspector: Validate raster(s) and compatibility
     Inspector-->>Web: Metadata, warnings, thumbnails
-    Web->>API: POST /analyze
-    API->>Agent: Query + inspected mode
+    Web->>API: POST /analysis-jobs
+    API-->>Web: 202 + job ID
+    API->>Agent: Query + inspected mode in local worker
     Agent->>Agent: Classify intent and required capabilities
     Agent->>Specialists: Execute selected workflow
     Specialists-->>Evidence: Masks, probabilities, statistics
-    Evidence-->>Web: Answer, assets, confidence, trace
+    loop Local polling
+        Web->>API: GET /analysis-jobs/{id}
+        API-->>Web: queued / validating / processing / integrating
+    end
+    Evidence-->>Web: completed result, assets, confidence, trace
 ```
 
 ## Agent contract
@@ -53,6 +58,12 @@ flowchart TD
     E --> C[ConfidenceEngine]
     C --> OUT[Answer + overlays + stats + trace + report]
 ```
+
+Large rasters are not reduced to a single 1024-pixel analysis image. `TileWindow` creates overlapping full-resolution windows, each specialist produces tile-space probabilities, and weighted stitching restores them to source coordinates. Preview images are downsampled independently for the browser. Paired georeferenced rasters use Rasterio reprojection onto the first raster's CRS, affine grid and resolution; unreferenced inputs use an explicitly reported pixel-space resize fallback.
+
+## Local job lifecycle
+
+The in-process `AnalysisJobService` serializes memory-heavy runs through a single local worker. It exposes `queued`, `validating`, `loading_model`, `processing`, `integrating`, `completed`, and `failed` states without Redis or Celery. Upload copies remain request-scoped until their job finishes and are then removed in all success/failure paths. Completed results remain durable through history JSON and evidence assets.
 
 ## Storage
 

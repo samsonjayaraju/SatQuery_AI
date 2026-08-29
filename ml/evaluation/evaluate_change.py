@@ -24,7 +24,14 @@ def main() -> None:
     if not records:
         raise SystemExit("No matching .npy prediction/target pairs found.")
     aggregate = {key: float(np.mean([record[key] for record in records])) for key in records[0]}
-    result = {"task": "change_detection", "samples": len(records), "metrics": aggregate}
+    result = {
+        "task_id": "change_detection",
+        "dataset": target_dir.name,
+        "model": "configured change detector",
+        "split": "provided prediction/target pairs",
+        "sample_count": len(records),
+        "metrics": aggregate,
+    }
     output = Path(args.output); output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result, indent=2))

@@ -9,6 +9,7 @@
     "build:web": "npm --workspace apps/web run build",
     "lint:web": "npm --workspace apps/web run lint",
     "typecheck:web": "npm --workspace apps/web exec tsc -- --noEmit",
+    "test:web": "npm --workspace apps/web run test",
     "test:api": ".venv/bin/python -m pytest apps/api/tests"
   }
 }

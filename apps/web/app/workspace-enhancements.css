@@ -1,0 +1,98 @@
+.processing-card > div {
+  position: relative;
+  flex: 1;
+  padding-bottom: 8px;
+}
+
+.processing-card span { text-transform: capitalize; }
+
+.processing-card i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  max-width: 100%;
+  background: var(--teal);
+  transition: width .25s ease;
+}
+
+.evidence-list button.active {
+  border-color: #31534e;
+  background: #102321;
+  box-shadow: inset 0 0 0 1px #20443f;
+}
+
+.viewer-toolbar button:disabled { opacity: .35; cursor: default; }
+
+.comparison-view {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: #040a0b;
+}
+
+.comparison-view > img,
+.comparison-after,
+.comparison-after img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.comparison-after { pointer-events: none; }
+
+.comparison-divider {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: var(--teal);
+  box-shadow: 0 0 12px rgba(83, 225, 194, .5);
+  pointer-events: none;
+}
+
+.comparison-view > input {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: ew-resize;
+}
+
+.comparison-labels {
+  position: absolute;
+  z-index: 5;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.comparison-labels span {
+  padding: 7px 9px;
+  color: #afc2bf;
+  background: rgba(5, 14, 16, .88);
+  font: 600 8px/1 var(--font-geist-mono), monospace;
+}
+
+.measured-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  margin-top: 18px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+}
+
+.measured-metrics div { padding: 9px; background: #091719; }
+.measured-metrics span { display: block; color: #58706d; font-size: 7px; text-transform: uppercase; }
+.measured-metrics b { display: block; margin-top: 4px; color: var(--teal); font: 600 12px/1 var(--font-geist-mono), monospace; }

@@ -10,14 +10,14 @@ from torch.utils.data import DataLoader
 
 from dataset import BigEarthNetManifestDataset
 from model import FrozenRemoteCLIPEncoder, FrozenSpectralEncoder, SatQueryRemoteSensingAdapter
-from train import macro_f1, resolve_device
+from train import classification_accuracy, macro_f1, resolve_device
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate a SatQuery adapter checkpoint.")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--manifest", required=True)
-    parser.add_argument("--encoder-path", default="models/remoteclip")
+    parser.add_argument("--encoder-path", default="models/remoteclip/RemoteCLIP-RN50.pt")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--output", default="validation_metrics.json")
     args = parser.parse_args()
@@ -25,7 +25,7 @@ def main() -> None:
     checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     config, labels = checkpoint["config"], checkpoint["labels"]
     if config["encoder_backend"] == "remoteclip":
-        encoder = FrozenRemoteCLIPEncoder(args.encoder_path)
+        encoder = FrozenRemoteCLIPEncoder(args.encoder_path, config.get("encoder_model", "RN50"))
         feature_dim = encoder.output_dim
     else:
         encoder, feature_dim = FrozenSpectralEncoder(), FrozenSpectralEncoder.output_dim
@@ -42,10 +42,18 @@ def main() -> None:
             logits = model(pixels.to(device))
             losses.append(float(loss_fn(logits, target.to(device)).cpu()))
             logits_all.append(logits.cpu()); labels_all.append(target)
+    logits, targets = torch.cat(logits_all), torch.cat(labels_all)
     metrics = {
-        "samples": len(dataset),
-        "loss": sum(losses) / max(len(losses), 1),
-        "macro_f1": macro_f1(torch.cat(logits_all), torch.cat(labels_all)),
+        "task_id": "domain_adapter",
+        "dataset": "configured remote-sensing manifest",
+        "model": "SatQuery adapter over RemoteCLIP",
+        "split": "provided validation manifest",
+        "sample_count": len(dataset),
+        "metrics": {
+            "loss": sum(losses) / max(len(losses), 1),
+            "macro_f1": macro_f1(logits, targets),
+            "accuracy": classification_accuracy(logits, targets),
+        },
         "checkpoint": str(Path(args.checkpoint)),
     }
     Path(args.output).write_text(json.dumps(metrics, indent=2), encoding="utf-8")

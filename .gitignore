@@ -18,5 +18,9 @@ models/**/*.pt
 models/**/*.pth
 models/**/*.ckpt
 models/**/*.safetensors
-datasets/**/data/
+models/**/source/
+models/**/*.zip
+models/**/snapshots/
+datasets/**/*
+!datasets/README.md
 ml/training/outputs/

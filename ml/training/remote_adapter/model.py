@@ -18,18 +18,25 @@ class FrozenSpectralEncoder(nn.Module):
 
 
 class FrozenRemoteCLIPEncoder(nn.Module):
-    def __init__(self, checkpoint: str):
+    def __init__(self, checkpoint: str, model_name: str = "RN50"):
         super().__init__()
-        from transformers import CLIPVisionModel
+        import open_clip
 
-        self.encoder = CLIPVisionModel.from_pretrained(checkpoint, local_files_only=True)
-        self.output_dim = self.encoder.config.hidden_size
+        self.encoder = open_clip.create_model(model_name)
+        state = torch.load(checkpoint, map_location="cpu", weights_only=True)
+        self.encoder.load_state_dict(state)
+        self.output_dim = self.encoder.visual.output_dim
         self.encoder.requires_grad_(False)
         self.encoder.eval()
 
     def forward(self, pixels: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
-            return self.encoder(pixel_values=pixels).pooler_output
+            return self.encoder.encode_image(pixels)
+
+    def train(self, mode: bool = True):
+        super().train(False)
+        self.encoder.eval()
+        return self
 
 
 class SatQueryRemoteSensingAdapter(nn.Module):
@@ -49,5 +56,8 @@ class SatQueryRemoteSensingAdapter(nn.Module):
 
     def forward(self, pixels: torch.Tensor) -> torch.Tensor:
         frozen_features = self.encoder(pixels)
+        return self.forward_features(frozen_features)
+
+    def forward_features(self, frozen_features: torch.Tensor) -> torch.Tensor:
         adapted = frozen_features + self.adapter(frozen_features)
         return self.classifier(adapted)

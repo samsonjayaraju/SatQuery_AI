@@ -1,7 +1,8 @@
 dataset_path: datasets/BigEarthNet-S2
 manifest: datasets/BigEarthNet-S2/samples.jsonl
 encoder_backend: remoteclip
-encoder_path: models/remoteclip
+encoder_path: models/remoteclip/RemoteCLIP-RN50.pt
+encoder_model: RN50
 epochs: 8
 batch_size: 24
 learning_rate: 0.0003
@@ -9,6 +10,6 @@ weight_decay: 0.0001
 bottleneck_dim: 256
 image_size: 224
 validation_split: 0.15
-num_workers: 2
+num_workers: 0
 seed: 26167
 output_dir: ml/training/outputs/satquery-adapter

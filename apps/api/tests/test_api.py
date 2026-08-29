@@ -1,4 +1,5 @@
 from io import BytesIO
+import time
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -61,3 +62,28 @@ def test_change_and_cross_modal_routes():
     assert fusion.status_code == 200
     assert fusion.json()["task"] == "OPTICAL_SAR_WATER"
     assert len(fusion.json()["evidence"]) == 3
+
+
+def test_background_analysis_job_contract():
+    created = client.post(
+        "/api/v1/analysis-jobs",
+        data={"query": "Describe this image", "input_mode": "single"},
+        files=[("files", ("scene.png", png_bytes(), "image/png"))],
+    )
+    assert created.status_code == 202, created.text
+    job_id = created.json()["job_id"]
+    payload = created.json()
+    for _ in range(100):
+        payload = client.get(f"/api/v1/analysis-jobs/{job_id}").json()
+        if payload["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.01)
+    assert payload["status"] == "completed", payload
+    assert payload["progress"] == 1.0
+    assert payload["result"]["analysis_id"] == payload["analysis_id"]
+
+
+def test_unknown_background_job_is_404():
+    response = client.get("/api/v1/analysis-jobs/not-a-real-job")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "JOB_NOT_FOUND"

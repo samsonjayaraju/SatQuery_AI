@@ -6,6 +6,22 @@ import numpy as np
 from PIL import Image
 
 
+def stretch_bands(data: np.ndarray) -> np.ndarray:
+    channels = []
+    for band in data:
+        valid = band[np.isfinite(band)]
+        if valid.size:
+            low, high = np.percentile(valid, [2, 98])
+            scaled = np.clip((band - low) / max(high - low, 1e-6), 0, 1)
+            scaled[~np.isfinite(scaled)] = 0
+        else:
+            scaled = np.zeros_like(band)
+        channels.append((scaled * 255).astype(np.uint8))
+    while len(channels) < 3:
+        channels.append(channels[-1])
+    return np.stack(channels[:3], axis=-1)
+
+
 def load_visual(path: Path, size: tuple[int, int] | None = None) -> np.ndarray:
     image: Image.Image
     if path.suffix.lower() in {".tif", ".tiff"}:
@@ -15,18 +31,7 @@ def load_visual(path: Path, size: tuple[int, int] | None = None) -> np.ndarray:
             with rasterio.open(path) as dataset:
                 indexes = list(range(1, min(dataset.count, 3) + 1))
                 data = dataset.read(indexes).astype(np.float32)
-                channels = []
-                for band in data:
-                    valid = band[np.isfinite(band)]
-                    if valid.size:
-                        low, high = np.percentile(valid, [2, 98])
-                        scaled = np.clip((band - low) / max(high - low, 1e-6), 0, 1)
-                    else:
-                        scaled = np.zeros_like(band)
-                    channels.append((scaled * 255).astype(np.uint8))
-                while len(channels) < 3:
-                    channels.append(channels[-1])
-                image = Image.fromarray(np.stack(channels[:3], axis=-1), "RGB")
+                image = Image.fromarray(stretch_bands(data))
         except (ImportError, Exception):
             image = Image.open(path).convert("RGB")
     else:

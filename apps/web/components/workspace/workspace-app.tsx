@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/shell/app-header";
-import { analyzeFiles, createReport, inspectFiles } from "@/lib/api";
-import type { AnalysisResponse, AnalysisStatus, InputMode, InspectionResponse } from "@/lib/types";
+import { createAnalysisJob, createReport, inspectFiles, waitForAnalysisJob } from "@/lib/api";
+import type { AnalysisJob, AnalysisResponse, AnalysisStatus, InputMode, InspectionResponse } from "@/lib/types";
 import { AssistantPanel } from "./assistant-panel";
 import { ExecutionTrace } from "./execution-trace";
 import { FileInputPanel } from "./file-input-panel";
@@ -27,9 +27,12 @@ export function WorkspaceApp() {
   const [activeEvidence, setActiveEvidence] = useState(0);
   const [activeImage, setActiveImage] = useState(0);
   const [split, setSplit] = useState(false);
+  const [compare, setCompare] = useState(false);
+  const [overlayVisible, setOverlayVisible] = useState(true);
   const [overlayOpacity, setOverlayOpacity] = useState(0.78);
   const [resetKey, setResetKey] = useState(0);
   const [reportBusy, setReportBusy] = useState(false);
+  const [job, setJob] = useState<AnalysisJob | null>(null);
 
   const expected = mode === "single" ? 1 : 2;
   const complete = files.length === expected;
@@ -59,6 +62,8 @@ export function WorkspaceApp() {
     setResult(null);
     setActiveImage(0);
     setSplit(false);
+    setCompare(false);
+    setOverlayVisible(true);
     if (selected.length) await inspect(selected, mode);
     else {
       setInspection(null);
@@ -77,23 +82,32 @@ export function WorkspaceApp() {
     setQuery(defaultQueries[next]);
     setActiveImage(0);
     setSplit(false);
+    setCompare(false);
+    setOverlayVisible(true);
     setTraceOpen(false);
+    setJob(null);
   }
 
   async function analyze() {
-    if (!complete || !query.trim() || status === "processing") return;
-    setStatus("processing");
+    if (!complete || !query.trim() || ["queued", "loading_model", "processing", "integrating"].includes(status)) return;
+    setStatus("queued");
     setError(null);
     setResult(null);
     setTraceOpen(false);
     try {
-      const next = await analyzeFiles(files, mode, query.trim());
+      const created = await createAnalysisJob(files, mode, query.trim());
+      setJob(created);
+      const next = await waitForAnalysisJob(created.job_id, (nextJob) => {
+        setJob(nextJob);
+        setStatus(nextJob.status);
+      });
       setResult(next);
       setInspection(next.inspection);
       setStatus("completed");
       setActiveEvidence(0);
       setActiveImage(mode === "bi_temporal" ? 1 : 0);
       setOverlayOpacity(.78);
+      setOverlayVisible(true);
     } catch (reason) {
       setStatus("failed");
       setError(reason instanceof Error ? reason.message : "Analysis failed.");
@@ -120,8 +134,8 @@ export function WorkspaceApp() {
       <AppHeader active="workspace" />
       <section className="workspace-grid">
         <FileInputPanel mode={mode} files={files} inspection={inspection} status={status} error={error} onModeChange={changeMode} onFiles={(next) => { void handleFiles(next); }} />
-        <ViewerPanel inspection={inspection} result={result} activeEvidence={activeEvidence} overlayOpacity={overlayOpacity} activeImage={activeImage} split={split} resetKey={resetKey} onOpacity={setOverlayOpacity} onImage={setActiveImage} onSplit={() => setSplit((value) => !value)} onFit={() => setResetKey((value) => value + 1)} />
-        <AssistantPanel mode={mode} status={status} query={query} result={result} canAnalyze={complete && Boolean(inspection?.valid)} reportBusy={reportBusy} onQuery={setQuery} onAnalyze={analyze} onEvidence={setActiveEvidence} onReport={report} />
+        <ViewerPanel inspection={inspection} result={result} activeEvidence={activeEvidence} overlayOpacity={overlayOpacity} activeImage={activeImage} split={split} compare={compare} overlayVisible={overlayVisible} resetKey={resetKey} onOpacity={setOverlayOpacity} onImage={setActiveImage} onSplit={() => { setSplit((value) => !value); setCompare(false); }} onCompare={() => { setCompare((value) => !value); setSplit(false); }} onOverlay={() => setOverlayVisible((value) => !value)} onFit={() => setResetKey((value) => value + 1)} />
+        <AssistantPanel mode={mode} status={status} job={job} query={query} result={result} activeEvidence={activeEvidence} canAnalyze={complete && Boolean(inspection?.valid)} reportBusy={reportBusy} onQuery={setQuery} onAnalyze={analyze} onEvidence={setActiveEvidence} onReport={report} />
       </section>
       <ExecutionTrace result={result} open={traceOpen} onToggle={() => setTraceOpen((value) => !value)} />
     </main>

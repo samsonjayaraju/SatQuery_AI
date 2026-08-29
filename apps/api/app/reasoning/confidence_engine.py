@@ -13,6 +13,7 @@ class ConfidenceEngine:
         *,
         agreement: float | None = None,
         spatial_quality: float = 0.82,
+        learned: bool = False,
     ) -> ConfidenceResult:
         selected = probability[probability >= threshold]
         strength = float(selected.mean()) if selected.size else float(probability.mean())
@@ -22,7 +23,11 @@ class ConfidenceEngine:
         overall = float(np.mean(list(components.values())))
         return ConfidenceResult(
             overall=round(max(0.0, min(1.0, overall)), 3),
-            type="heuristic",
+            type="mixed" if learned else "heuristic",
             components=components,
-            note="Heuristic confidence derived from pixel evidence and spatial consistency; it is not a calibrated model probability.",
+            note=(
+                "Mixed confidence combines learned model evidence with spatial consistency; scores are not calibration guarantees."
+                if learned
+                else "Heuristic confidence derived from pixel evidence and spatial consistency; it is not a calibrated model probability."
+            ),
         )

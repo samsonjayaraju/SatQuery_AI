@@ -1,5 +1,6 @@
 export type InputMode = "single" | "bi_temporal" | "cross_modal";
-export type AnalysisStatus = "empty" | "validating" | "ready" | "processing" | "completed" | "failed";
+export type JobStatus = "queued" | "validating" | "loading_model" | "processing" | "integrating" | "completed" | "failed";
+export type AnalysisStatus = "empty" | "uploading" | "ready" | JobStatus;
 
 export interface RasterMetadata {
   filename: string;
@@ -17,6 +18,8 @@ export interface RasterMetadata {
   modality: string;
   format: string;
   thumbnail_url: string | null;
+  display_width: number | null;
+  display_height: number | null;
 }
 
 export interface InspectionResponse {
@@ -83,6 +86,18 @@ export interface AnalysisResponse {
   runtime_ms: number;
 }
 
+export interface AnalysisJob {
+  job_id: string;
+  status: JobStatus;
+  message: string;
+  progress: number;
+  created_at: string;
+  updated_at: string;
+  analysis_id: string | null;
+  result: AnalysisResponse | null;
+  error_code: string | null;
+}
+
 export interface HealthResponse {
   status: string;
   device: string;
@@ -113,4 +128,26 @@ export interface HistoryItem {
   query: string;
   answer: string;
   confidence: number;
+}
+
+export interface BenchmarkTask {
+  id: string;
+  name: string;
+  dataset: string;
+  expected_metrics: string[];
+  status: "measured" | "not_evaluated";
+  result: null | {
+    model?: string;
+    split?: string;
+    sample_count?: number;
+    created_at?: string;
+    result_file: string;
+    metrics: Record<string, number>;
+  };
+}
+
+export interface BenchmarkResponse {
+  status: "measured" | "partial" | "not_evaluated";
+  message: string;
+  tasks: BenchmarkTask[];
 }

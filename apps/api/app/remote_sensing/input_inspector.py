@@ -113,10 +113,21 @@ def inspect_inputs(paths: list[Path], mode: str, urls: list[str] | None = None) 
                 for a, b in zip(first.pixel_resolution, second.pixel_resolution)
             )
         )
-        if first.bounds and second.bounds and compatibility.crs_match:
-            compatibility.overlap = round(_intersection_over_min_area(first.bounds, second.bounds), 4)
+        comparison_bounds = second.bounds
+        if first.bounds and second.bounds and first.crs and second.crs and not compatibility.crs_match:
+            try:
+                from rasterio.warp import transform_bounds
+
+                comparison_bounds = list(transform_bounds(second.crs, first.crs, *second.bounds))
+                warnings.append("Coordinate systems differ; the second raster will be reprojected onto the first grid.")
+            except (ImportError, ValueError):
+                comparison_bounds = None
+                warnings.append("Coordinate systems differ and overlap could not be precomputed; reprojection will be attempted during analysis.")
+        if first.bounds and comparison_bounds and first.crs and second.crs:
+            compatibility.overlap = round(_intersection_over_min_area(first.bounds, comparison_bounds), 4)
             compatibility.co_registered = bool(
-                compatibility.overlap >= 0.9 and compatibility.resolution_compatible
+                compatibility.overlap >= 0.9
+                and (compatibility.resolution_compatible or not compatibility.crs_match)
             )
         else:
             compatibility.overlap = None
@@ -124,8 +135,6 @@ def inspect_inputs(paths: list[Path], mode: str, urls: list[str] | None = None) 
             warnings.append("Pair has no shared georeferencing; pixel-space alignment will be used.")
         if not compatibility.dimensions_match:
             warnings.append("Dimensions differ; the second image will be aligned to the first in pixel space.")
-        if first.crs and second.crs and not compatibility.crs_match:
-            raise SatQueryError("CRS_MISMATCH", "Paired GeoTIFF files use different coordinate systems.")
         if compatibility.overlap is not None and compatibility.overlap < 0.1:
             raise SatQueryError("NO_SPATIAL_OVERLAP", "Paired GeoTIFF files do not overlap sufficiently.")
         if mode == "cross_modal":

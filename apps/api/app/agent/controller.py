@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Callable
 
 from app.api.schemas.analysis import AnalysisResponse
 from app.services.analysis_service import AnalysisService
@@ -12,5 +13,11 @@ class SatQueryAgent:
     def __init__(self, analysis_service: AnalysisService):
         self.analysis_service = analysis_service
 
-    def run(self, paths: list[Path], query: str, input_mode: str) -> AnalysisResponse:
-        return self.analysis_service.analyze(paths, query, input_mode)
+    def run(
+        self,
+        paths: list[Path],
+        query: str,
+        input_mode: str,
+        progress: Callable[[str, str], None] | None = None,
+    ) -> AnalysisResponse:
+        return self.analysis_service.analyze(paths, query, input_mode, progress)

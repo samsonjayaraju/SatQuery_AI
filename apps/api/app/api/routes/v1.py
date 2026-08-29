@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile, status
 
-from app.api.schemas.analysis import AnalysisResponse, HealthResponse, InspectionResponse, ModelStatus
+from app.api.schemas.analysis import AnalysisJob, AnalysisResponse, HealthResponse, InspectionResponse, ModelStatus
 from app.core.exceptions import SatQueryError
 from app.models.manager import ModelManager
 from app.remote_sensing.input_inspector import inspect_inputs
@@ -75,6 +75,27 @@ async def _run_analysis(request: Request, query: str, input_mode: str, files: li
         cleanup_uploads(paths)
 
 
+@router.post("/analysis-jobs", response_model=AnalysisJob, status_code=status.HTTP_202_ACCEPTED)
+async def create_analysis_job(
+    request: Request,
+    query: Annotated[str, Form(min_length=1, max_length=2000)],
+    input_mode: Annotated[str, Form()],
+    files: Annotated[list[UploadFile], File()],
+) -> AnalysisJob:
+    _, paths = await save_uploads(files, request.app.state.settings)
+    try:
+        inspect_inputs(paths, input_mode)
+        return request.app.state.jobs.submit(paths, query, input_mode, request.app.state.agent.run)
+    except Exception:
+        cleanup_uploads(paths)
+        raise
+
+
+@router.get("/analysis-jobs/{job_id}", response_model=AnalysisJob)
+def get_analysis_job(request: Request, job_id: str) -> AnalysisJob:
+    return request.app.state.jobs.get(job_id)
+
+
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze(
     request: Request,
@@ -130,14 +151,5 @@ def create_report(request: Request, analysis_id: str):
 
 
 @router.get("/benchmarks")
-def benchmarks():
-    return {
-        "status": "not_evaluated",
-        "message": "Not evaluated yet.",
-        "tasks": [
-            {"name": "Single Image VQA", "dataset": "VRSBench / RSVQA", "metrics": None},
-            {"name": "Change Detection", "dataset": "LEVIR-CD", "metrics": None},
-            {"name": "Change VQA", "dataset": "CDVQA", "metrics": None},
-            {"name": "Grounding", "dataset": "VRSBench", "metrics": None},
-        ],
-    }
+def benchmarks(request: Request):
+    return request.app.state.benchmarks.summary()

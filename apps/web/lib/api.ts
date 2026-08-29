@@ -1,5 +1,7 @@
 import type {
   AnalysisResponse,
+  AnalysisJob,
+  BenchmarkResponse,
   HealthResponse,
   HistoryItem,
   InputMode,
@@ -48,6 +50,34 @@ export async function analyzeFiles(files: File[], inputMode: InputMode, query: s
   );
 }
 
+export async function createAnalysisJob(files: File[], inputMode: InputMode, query: string): Promise<AnalysisJob> {
+  return parseResponse(
+    await fetch(`${API_URL}/api/v1/analysis-jobs`, {
+      method: "POST",
+      body: fileForm(files, inputMode, query),
+    }),
+  );
+}
+
+export async function fetchAnalysisJob(jobId: string): Promise<AnalysisJob> {
+  return parseResponse(await fetch(`${API_URL}/api/v1/analysis-jobs/${jobId}`, { cache: "no-store" }));
+}
+
+export async function waitForAnalysisJob(
+  jobId: string,
+  onProgress?: (job: AnalysisJob) => void,
+  pollIntervalMs = 450,
+): Promise<AnalysisResponse> {
+  for (let attempt = 0; attempt < 4000; attempt += 1) {
+    const job = await fetchAnalysisJob(jobId);
+    onProgress?.(job);
+    if (job.status === "completed" && job.result) return job.result;
+    if (job.status === "failed") throw new Error(job.message);
+    await new Promise((resolve) => window.setTimeout(resolve, pollIntervalMs));
+  }
+  throw new Error("The local analysis timed out before completion.");
+}
+
 export async function fetchHealth(): Promise<HealthResponse> {
   return parseResponse(await fetch(`${API_URL}/api/v1/health`, { cache: "no-store" }));
 }
@@ -58,6 +88,10 @@ export async function fetchModels(): Promise<ModelStatus[]> {
 
 export async function fetchHistory(): Promise<HistoryItem[]> {
   return parseResponse(await fetch(`${API_URL}/api/v1/history`, { cache: "no-store" }));
+}
+
+export async function fetchBenchmarks(): Promise<BenchmarkResponse> {
+  return parseResponse(await fetch(`${API_URL}/api/v1/benchmarks`, { cache: "no-store" }));
 }
 
 export async function fetchAnalysis(id: string): Promise<AnalysisResponse> {

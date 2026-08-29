@@ -25,6 +25,8 @@ class RasterMetadata(BaseModel):
     modality: str = "optical"
     format: str
     thumbnail_url: str | None = None
+    display_width: int | None = None
+    display_height: int | None = None
 
 
 class Compatibility(BaseModel):
@@ -102,6 +104,18 @@ class AnalysisResponse(BaseModel):
     inspection: InspectionResponse
     execution_trace: ExecutionTrace
     runtime_ms: int
+
+
+class AnalysisJob(BaseModel):
+    job_id: str
+    status: Literal["queued", "validating", "loading_model", "processing", "integrating", "completed", "failed"]
+    message: str
+    progress: float = 0.0
+    created_at: datetime
+    updated_at: datetime
+    analysis_id: str | None = None
+    result: AnalysisResponse | None = None
+    error_code: str | None = None
 
 
 class ModelStatus(BaseModel):
