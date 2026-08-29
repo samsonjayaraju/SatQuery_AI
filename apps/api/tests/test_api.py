@@ -3,6 +3,7 @@ import time
 
 from fastapi.testclient import TestClient
 from PIL import Image
+import pytest
 
 from app.main import app
 
@@ -35,7 +36,9 @@ def test_single_analysis_contract():
     assert payload["task"] == "REGION_GROUNDING"
     assert payload["evidence"]
     assert payload["execution_trace"]["status"] == "success"
-    assert payload["development_label"].startswith("Development Mock Result")
+    assert payload["development_label"].startswith("DEVELOPMENT MOCK OUTPUT")
+    landcover_total = sum(value for key, value in payload["statistics"].items() if key.endswith("_percent"))
+    assert landcover_total == pytest.approx(100.0, abs=0.05)
 
 
 def test_change_and_cross_modal_routes():
@@ -50,6 +53,8 @@ def test_change_and_cross_modal_routes():
     assert change.status_code == 200
     assert change.json()["task"] == "CHANGE_DESCRIPTION"
     assert "changed_area_percent" in change.json()["statistics"]
+    assert change.json()["transitions"]
+    assert "registration_quality" in change.json()["confidence"]["components"]
 
     fusion = client.post(
         "/api/v1/analyze",

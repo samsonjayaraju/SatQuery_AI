@@ -10,7 +10,7 @@ def test_routes_grounding_without_user_model_selection():
 
 def test_routes_built_up_change():
     result = QueryInterpreter().classify("Has the built-up area increased?", "bi_temporal")
-    assert result.intent == "CHANGE_VQA"
+    assert result.intent == "BUILT_UP_CHANGE"
     assert result.entities["target_class"] == "built_up"
 
 

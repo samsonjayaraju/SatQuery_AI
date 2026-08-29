@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Check, ChevronDown, ChevronsUp, Cpu, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, Check, ChevronDown, ChevronsUp, Cpu, Wrench } from "lucide-react";
 import type { AnalysisResponse } from "@/lib/types";
 
 export function ExecutionTrace({ result, open, onToggle }: { result: AnalysisResponse | null; open: boolean; onToggle: () => void }) {
@@ -26,6 +26,8 @@ export function ExecutionTrace({ result, open, onToggle }: { result: AnalysisRes
             <div className="trace-resources">
               <div><span><Cpu size={13} /> Models / baselines</span>{result.execution_trace.models.map((model) => <b key={model}>{model}</b>)}</div>
               <div><span><Wrench size={13} /> Tools</span><p>{result.execution_trace.tools.join(" · ")}</p></div>
+              <div><span>Parameters</span><p>{Object.entries(result.execution_trace.parameters).map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ")}</p></div>
+              {result.execution_trace.warnings.length > 0 && <div className="trace-warnings"><span><AlertTriangle size={13} /> Warnings</span><p>{result.execution_trace.warnings.join(" ")}</p></div>}
             </div>
           </div>
         </section>

@@ -11,11 +11,13 @@ Built for Smart India Hackathon / ISRO–Department of Space problem statement *
 - Three exact modes: single image, bi-temporal pair, and optical + SAR pair.
 - GeoTIFF/TIFF inspection with CRS, affine transform, bounds, resolution, NoData, bands and pair compatibility when Rasterio metadata is available.
 - PNG/JPEG benchmark-image support with explicit pixel-space labeling.
+- High-precision composite-figure screening that pauses inference on paper graphics/screenshots and requests the original raster panels.
 - Rule-based query interpretation across the 14 specified intents.
 - Central model and tool registries with checkpoint status and device reporting.
 - Learned RemoteCLIP RN50 scene captioning, query answering and patch-level grounding.
 - A trained residual adapter over frozen RemoteCLIP features using 5,000 balanced EuroSAT RGB samples.
-- Official ChangeFormer V6 LEVIR inference with tiled probability maps, overlays, largest-region polygons, class deltas and structured change reasoning.
+- Mutually exclusive normalized land-cover shares, caption/evidence consistency scoring, and an explicit ceiling on uncalibrated learned confidence.
+- Target-aware hybrid change inference: official ChangeFormer V6 for structural evidence plus appearance and land-cover transitions for water, vegetation and other environmental change.
 - Learned optical evidence plus SAR backscatter/texture extraction and a replaceable weighted SatFusion baseline.
 - Full-resolution overlapping tile inference with stitched outputs; browser previews are downsampled separately.
 - GeoTIFF pair reprojection onto a shared grid, with an explicit pixel-space fallback for unreferenced images.

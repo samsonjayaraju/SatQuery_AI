@@ -12,6 +12,9 @@ class ToolDefinition:
 
 DEFAULT_TOOLS = (
     ToolDefinition("geotiff_inspector", "GeoTIFFInspector", ("inspection",)),
+    ToolDefinition("pair_compatibility", "PairCompatibilityChecker", ("inspection", "registration")),
+    ToolDefinition("image_registration", "ImageRegistration", ("registration",)),
+    ToolDefinition("image_tiler", "ImageTiler", ("preprocessing",)),
     ToolDefinition("band_selector", "BandSelector", ("preprocessing", "optical_analysis", "land_cover")),
     ToolDefinition("ndvi", "NDVICalculator", ("vegetation_index",)),
     ToolDefinition("ndwi", "NDWICalculator", ("water_index",)),
@@ -19,6 +22,8 @@ DEFAULT_TOOLS = (
     ToolDefinition("sar_analyzer", "SARBackscatterAnalyzer", ("sar_analysis",)),
     ToolDefinition("satfusion", "SatFusion", ("satfusion", "fusion")),
     ToolDefinition("change_mask", "ChangeMaskGenerator", ("change_detection",)),
+    ToolDefinition("mask_postprocessor", "MaskPostProcessor", ("mask_postprocessing",)),
+    ToolDefinition("landcover_transitions", "LandCoverTransitionAnalyzer", ("transition_analysis",)),
     ToolDefinition("polygon_extractor", "PolygonExtractor", ("overlay_generation",)),
     ToolDefinition("area_calculator", "AreaCalculator", ("statistics",)),
     ToolDefinition("overlay_generator", "OverlayGenerator", ("overlay_generation",)),

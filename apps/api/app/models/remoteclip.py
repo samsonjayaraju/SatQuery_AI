@@ -42,6 +42,7 @@ SCENE_CAPTIONS = (
     "A satellite image of bare land, exposed soil, rock, or sparse vegetation.",
     "A satellite image of mixed land cover containing built-up, vegetation, and water areas.",
 )
+SCENE_CAPTION_CLASSES = ("built_up", "built_up", "agriculture", "vegetation", "water", "bare_land", "mixed")
 
 
 class AdapterHead(nn.Module):
@@ -66,6 +67,7 @@ class LearnedSceneResult:
     answer: str
     score: float
     model_name: str
+    label: str | None = None
 
 
 class RemoteCLIPService:
@@ -205,7 +207,15 @@ class RemoteCLIPService:
                 if broad_label:
                     broad[broad_labels.index(broad_label)] += class_scores[:, class_index]
             broad /= np.maximum(broad.sum(axis=0, keepdims=True), 1e-6)
-            return self._stitch_scores(image, windows, broad.T), "SatQuery EuroSAT Adapter + RemoteCLIP RN50"
+            normalized_features = image_features / image_features.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+            text_features = self._text_features(list(BROAD_PROMPTS.values()))
+            zero_shot = (100 * normalized_features @ text_features.T).softmax(dim=-1).detach().cpu().numpy()
+            # EuroSAT has no barren-land class. Retain the strong trained head for its
+            # supported classes while blending RemoteCLIP zero-shot evidence so every
+            # advertised broad class remains reachable.
+            combined = 0.8 * broad.T + 0.2 * zero_shot
+            combined /= np.maximum(combined.sum(axis=1, keepdims=True), 1e-6)
+            return self._stitch_scores(image, windows, combined), "SatQuery EuroSAT Adapter + RemoteCLIP RN50"
         text_features = self._text_features(list(BROAD_PROMPTS.values()))
         scores = (100 * image_features @ text_features.T).softmax(dim=-1).detach().cpu().numpy()
         return self._stitch_scores(image, windows, scores), self.model_name
@@ -217,7 +227,7 @@ class RemoteCLIPService:
             answer = SCENE_CAPTIONS[index]
             if not caption:
                 answer = f"RemoteCLIP finds the closest learned scene description to be: {answer}"
-            return LearnedSceneResult(answer, float(scores[index]), self.model_name)
+            return LearnedSceneResult(answer, float(scores[index]), self.model_name, SCENE_CAPTION_CLASSES[index])
         readable = target.replace("_", " ")
         prompts = [
             f"A satellite image containing a clearly visible {readable} area.",
@@ -226,7 +236,7 @@ class RemoteCLIPService:
         scores = self.classify(image, prompts)
         present = bool(scores[0] >= scores[1])
         answer = f"{'Yes' if present else 'No'}—the learned RemoteCLIP comparison {'supports' if present else 'does not support'} visible {readable} in this scene ({scores[0]:.0%} positive evidence)."
-        return LearnedSceneResult(answer, float(max(scores)), self.model_name)
+        return LearnedSceneResult(answer, float(max(scores)), self.model_name, target)
 
     def ground(self, image: np.ndarray, query: str, target: str | None) -> tuple[np.ndarray, float]:
         description = (target or query).replace("_", " ")

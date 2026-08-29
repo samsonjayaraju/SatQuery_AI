@@ -89,7 +89,7 @@ export function WorkspaceApp() {
   }
 
   async function analyze() {
-    if (!complete || !query.trim() || ["queued", "loading_model", "processing", "integrating"].includes(status)) return;
+    if (!complete || !query.trim() || ["queued", "registering", "loading_model", "processing", "postprocessing", "integrating"].includes(status)) return;
     setStatus("queued");
     setError(null);
     setResult(null);

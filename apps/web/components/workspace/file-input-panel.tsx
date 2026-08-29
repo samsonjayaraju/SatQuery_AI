@@ -15,6 +15,11 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function statusText(value: boolean | null) {
+  if (value === null) return "N/A";
+  return value ? "MATCH" : "REVIEW";
+}
+
 export function FileInputPanel({
   mode,
   files,
@@ -88,7 +93,19 @@ export function FileInputPanel({
 
       {inspection ? (
         <div className="metadata-block">
-          <div className="section-label"><span className="eyebrow">IMAGE METADATA</span><span className="validation-badge"><Check size={11} /> VALID</span></div>
+          <div className="section-label">
+            <span className="eyebrow">IMAGE METADATA</span>
+            <span className={`validation-badge ${inspection.valid ? "" : "blocked"}`}>
+              {inspection.valid ? <Check size={11} /> : <AlertTriangle size={11} />}
+              {inspection.valid ? "VALID" : "SOURCE NEEDED"}
+            </span>
+          </div>
+          {inspection.warnings.length > 0 && (
+            <div className="input-warning" role="alert">
+              <AlertTriangle size={14} />
+              <span><b>{inspection.valid ? "Input advisory" : "Analysis paused"}</b>{inspection.warnings[0]}</span>
+            </div>
+          )}
           {inspection.images.map((image, index) => (
             <dl key={image.filename}>
               {inspection.images.length > 1 && <div className="metadata-title">{labels[index]}</div>}
@@ -100,10 +117,23 @@ export function FileInputPanel({
             </dl>
           ))}
           {inspection.images.length === 2 && (
-            <div className={`compatibility ${inspection.compatibility.co_registered ? "pass" : "warn"}`}>
-              {inspection.compatibility.co_registered ? <Check size={13} /> : <AlertTriangle size={13} />}
-              <span><b>{inspection.compatibility.co_registered ? "Pair compatible" : "Pixel alignment"}</b>{inspection.compatibility.overlap !== null ? `${Math.round(inspection.compatibility.overlap * 100)}% geographic overlap` : "No shared georeferencing"}</span>
-            </div>
+            <>
+              {!inspection.images.every((image) => image.georeferenced) && (
+                <div className="pixel-space-warning" role="alert">
+                  <AlertTriangle size={14} /><span><b>PIXEL-SPACE ANALYSIS</b>These images contain no shared geographic metadata. Results use image-space alignment and are not geographic area measurements.</span>
+                </div>
+              )}
+              <div className="compatibility-grid" aria-label="Pair compatibility">
+                <div><span>CRS match</span><b>{statusText(inspection.compatibility.crs_match)}</b></div>
+                <div><span>Spatial overlap</span><b>{inspection.compatibility.overlap === null ? "N/A" : `${Math.round(inspection.compatibility.overlap * 100)}%`}</b></div>
+                <div><span>Resolution match</span><b>{statusText(inspection.compatibility.resolution_compatible)}</b></div>
+                <div><span>Registration</span><b>{Math.round(inspection.registration.confidence * 100)}%</b></div>
+              </div>
+              <div className={`compatibility ${inspection.registration.status === "accepted" ? "pass" : "warn"}`}>
+                {inspection.registration.status === "accepted" ? <Check size={13} /> : <AlertTriangle size={13} />}
+                <span><b>{inspection.registration.status === "accepted" ? "Pair compatible" : "Review alignment"}</b>{inspection.registration.method.replaceAll("_", " ")}</span>
+              </div>
+            </>
           )}
         </div>
       ) : (

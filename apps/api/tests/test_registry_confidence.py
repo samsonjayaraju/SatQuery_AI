@@ -32,3 +32,16 @@ def test_confidence_is_derived_from_components():
     assert result.type == "heuristic"
     assert 0 < result.overall < 1
     assert result.components["evidence_strength"] == 0.85
+
+
+def test_uncalibrated_learned_confidence_is_capped():
+    probability = np.full((4, 4), 0.99, dtype=np.float32)
+    result = ConfidenceEngine().from_probability(
+        probability,
+        0.5,
+        learned=True,
+        model_score=0.99,
+        semantic_consistency=1.0,
+    )
+    assert result.overall == 0.74
+    assert "capped" in result.note

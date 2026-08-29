@@ -30,6 +30,16 @@ function readableStat(value: string | number, key: string) {
   return String(value);
 }
 
+const confidenceLabels: Record<string, string> = {
+  evidence_strength: "Model evidence",
+  model_score: "Change model",
+  registration_quality: "Registration quality",
+  spatial_quality: "Spatial evidence",
+  cross_sensor_agreement: "Cross-sensor agreement",
+  semantic_consistency: "Land-cover agreement",
+  input_quality: "Input quality",
+};
+
 export function AssistantPanel({
   mode,
   status,
@@ -57,7 +67,7 @@ export function AssistantPanel({
   onEvidence: (index: number) => void;
   onReport: () => void;
 }) {
-  const busy = ["queued", "validating", "loading_model", "processing", "integrating"].includes(status);
+  const busy = ["queued", "validating", "registering", "loading_model", "processing", "postprocessing", "integrating"].includes(status);
   function submit(event: FormEvent) {
     event.preventDefault();
     onAnalyze();
@@ -89,6 +99,7 @@ export function AssistantPanel({
       ) : (
         <div className="result-scroll">
           {result.development_label && <div className="mock-label"><AlertTriangle size={13} /> {result.development_label}</div>}
+          {result.warnings.length > 0 && <div className="result-warning"><AlertTriangle size={14} /><span><b>ANALYSIS ADVISORY</b>{result.warnings.join(" ")}</span></div>}
           <div className="user-query"><span>QUERY</span><p>{result.query}</p></div>
           <article className="answer-card">
             <div className="answer-heading"><span><Bot size={15} /> SATQUERY</span><span>{result.task.replaceAll("_", " ")}</span></div>
@@ -97,6 +108,13 @@ export function AssistantPanel({
           <section className="confidence-card">
             <div className="confidence-ring" style={{ "--score": `${result.confidence.overall * 360}deg` } as React.CSSProperties}><span>{Math.round(result.confidence.overall * 100)}<small>%</small></span></div>
             <div><span className="eyebrow">CONFIDENCE · {result.confidence.type.toUpperCase()}</span><strong>{result.confidence.overall >= .75 ? "Strong evidence" : result.confidence.overall >= .55 ? "Moderate evidence" : "Review advised"}</strong><small>{result.confidence.note}</small></div>
+          </section>
+          <div className="confidence-components">
+            {Object.entries(result.confidence.components).map(([key, value]) => <div key={key}><span>{confidenceLabels[key] ?? key.replaceAll("_", " ")}</span><b>{Math.round(value * 100)}%</b></div>)}
+          </div>
+          <section className="model-provenance">
+            <span className="eyebrow">MODELS / BASELINES</span>
+            <div>{result.execution_trace.models.map((model) => <span key={model}>{model}</span>)}</div>
           </section>
           <section className="result-section">
             <div className="section-label"><span className="eyebrow">SPATIAL EVIDENCE</span><span>{result.evidence.length} LAYERS</span></div>
@@ -108,6 +126,10 @@ export function AssistantPanel({
               ))}
             </div>
           </section>
+          {result.transitions.length > 0 && <section className="result-section transition-section">
+            <span className="eyebrow">LAND-COVER TRANSITIONS</span>
+            <div>{result.transitions.slice(0, 6).map((item) => <p key={`${item.from_class}-${item.to_class}`}><span>{item.from_class === "unchanged" ? "Unchanged" : `${item.from_class.replaceAll("_", " ")} → ${item.to_class.replaceAll("_", " ")}`}</span><b>{item.percent.toFixed(1)}%</b></p>)}</div>
+          </section>}
           <section className="result-section stats-section">
             <span className="eyebrow">MEASUREMENTS</span>
             <div className="stat-grid">

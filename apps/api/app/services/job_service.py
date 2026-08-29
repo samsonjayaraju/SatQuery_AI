@@ -28,8 +28,10 @@ class AnalysisJobService:
         progress_by_status = {
             "queued": 0.0,
             "validating": 0.12,
+            "registering": 0.22,
             "loading_model": 0.3,
             "processing": 0.52,
+            "postprocessing": 0.78,
             "integrating": 0.86,
             "completed": 1.0,
             "failed": 1.0,

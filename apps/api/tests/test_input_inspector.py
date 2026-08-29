@@ -6,6 +6,7 @@ import rasterio
 from rasterio.transform import from_origin
 
 from app.remote_sensing.input_inspector import inspect_inputs
+from app.remote_sensing.alignment import align_visual_pair
 
 
 def image(path: Path, size=(80, 60), color=(40, 100, 160)) -> Path:
@@ -19,6 +20,27 @@ def test_inspects_benchmark_png(tmp_path):
     assert response.images[0].width == 80
     assert response.images[0].band_count == 3
     assert response.images[0].georeferenced is False
+
+
+def test_rejects_multi_panel_document_figure(tmp_path):
+    generator = np.random.default_rng(7)
+    canvas = np.full((420, 420, 3), 255, dtype=np.uint8)
+    for row in range(3):
+        for column in range(3):
+            top = 16 + row * 136
+            left = 16 + column * 136
+            canvas[top : top + 116, left : left + 116] = generator.integers(
+                20, 220, size=(116, 116, 3), dtype=np.uint8
+            )
+    path = tmp_path / "paper-figure.png"
+    Image.fromarray(canvas).save(path)
+
+    response = inspect_inputs([path], "single")
+
+    assert response.valid is False
+    assert response.visual_quality.status == "unsupported"
+    assert "composite_figure" in response.visual_quality.flags
+    assert "original satellite panel" in response.warnings[0]
 
 
 def test_pixel_space_pair_compatibility(tmp_path):
@@ -40,3 +62,21 @@ def test_geotiff_metadata_and_georeferencing(tmp_path):
     assert metadata.crs == "EPSG:4326"
     assert metadata.band_count == 4
     assert metadata.pixel_resolution == [0.0001, 0.0001]
+
+
+def test_feature_registration_returns_measured_transform(tmp_path):
+    generator = np.random.default_rng(42)
+    first_array = generator.integers(0, 256, size=(240, 260, 3), dtype=np.uint8)
+    second_array = np.zeros_like(first_array)
+    second_array[12:, 18:] = first_array[:-12, :-18]
+    first = tmp_path / "before.png"
+    second = tmp_path / "after.png"
+    Image.fromarray(first_array).save(first)
+    Image.fromarray(second_array).save(second)
+
+    result = align_visual_pair(first, second)
+
+    assert result.method == "feature_matching"
+    assert result.confidence >= 0.55
+    assert result.transform is not None
+    assert result.valid_mask.mean() > 0.8

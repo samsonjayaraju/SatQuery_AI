@@ -3,11 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
+import numpy as np
 from fastapi import APIRouter, File, Form, Request, UploadFile, status
+from PIL import Image
 
-from app.api.schemas.analysis import AnalysisJob, AnalysisResponse, HealthResponse, InspectionResponse, ModelStatus
+from app.api.schemas.analysis import AnalysisJob, AnalysisResponse, HealthResponse, InspectionResponse, ModelStatus, RegistrationInfo
 from app.core.exceptions import SatQueryError
 from app.models.manager import ModelManager
+from app.remote_sensing.alignment import align_visual_pair
 from app.remote_sensing.input_inspector import inspect_inputs
 from app.remote_sensing.preprocessing import load_visual
 from app.remote_sensing.visualization import save_image
@@ -45,26 +48,55 @@ async def inspect_files(
 ) -> InspectionResponse:
     request_id, paths = await save_uploads(files, request.app.state.settings)
     output = request.app.state.settings.data_dir.resolve() / "outputs" / f"inspection-{request_id}"
-    urls = []
-    for index, path in enumerate(paths):
-        try:
-            image = load_visual(path)
+    try:
+        response = inspect_inputs(paths, input_mode)
+        alignment = None
+        if len(paths) == 2 and response.valid:
+            alignment = align_visual_pair(
+                paths[0],
+                paths[1],
+                min_confidence=request.app.state.settings.registration_min_confidence,
+            )
+            source_arrays = [alignment.first, alignment.second]
+            status_value = (
+                "accepted"
+                if alignment.confidence >= request.app.state.settings.registration_min_confidence
+                else "low_quality"
+            )
+            warnings = list(alignment.warnings)
+            if status_value == "low_quality":
+                warnings.append("Input alignment quality is insufficient for highly confident quantitative change estimation.")
+            response.registration = RegistrationInfo(
+                method=alignment.method,
+                confidence=alignment.confidence,
+                status=status_value,
+                transform=alignment.transform,
+                warnings=warnings,
+            )
+            for warning in warnings:
+                if warning not in response.warnings:
+                    response.warnings.append(warning)
+        else:
+            source_arrays = [load_visual(path) for path in paths]
+
+        for index, image in enumerate(source_arrays):
             max_side = max(image.shape[:2])
             if max_side > 760:
                 scale = 760 / max_side
-                image = load_visual(path, (round(image.shape[1] * scale), round(image.shape[0] * scale)))
+                image = np.asarray(
+                    Image.fromarray(image).resize(
+                        (round(image.shape[1] * scale), round(image.shape[0] * scale)),
+                        Image.Resampling.BILINEAR,
+                    )
+                )
             preview = output / f"input-{index + 1}.png"
             save_image(image, preview)
-            urls.append(f"/assets/outputs/inspection-{request_id}/{preview.name}")
-        except Exception:
-            urls.append(None)
-    try:
-        response = inspect_inputs(paths, input_mode, urls)
-    except Exception:
+            response.images[index].thumbnail_url = f"/assets/outputs/inspection-{request_id}/{preview.name}"
+            response.images[index].display_width = source_arrays[index].shape[1]
+            response.images[index].display_height = source_arrays[index].shape[0]
+        return response
+    finally:
         cleanup_uploads(paths)
-        raise
-    cleanup_uploads(paths)
-    return response
 
 
 async def _run_analysis(request: Request, query: str, input_mode: str, files: list[UploadFile]) -> AnalysisResponse:
@@ -84,7 +116,13 @@ async def create_analysis_job(
 ) -> AnalysisJob:
     _, paths = await save_uploads(files, request.app.state.settings)
     try:
-        inspect_inputs(paths, input_mode)
+        inspection = inspect_inputs(paths, input_mode)
+        if not inspection.valid:
+            raise SatQueryError(
+                "UNSUPPORTED_COMPOSITE_IMAGE",
+                inspection.visual_quality.recommendation or "The selected input is not suitable for raster analysis.",
+                422,
+            )
         return request.app.state.jobs.submit(paths, query, input_mode, request.app.state.agent.run)
     except Exception:
         cleanup_uploads(paths)

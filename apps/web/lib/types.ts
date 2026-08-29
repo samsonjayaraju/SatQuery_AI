@@ -1,5 +1,5 @@
 export type InputMode = "single" | "bi_temporal" | "cross_modal";
-export type JobStatus = "queued" | "validating" | "loading_model" | "processing" | "integrating" | "completed" | "failed";
+export type JobStatus = "queued" | "validating" | "registering" | "loading_model" | "processing" | "postprocessing" | "integrating" | "completed" | "failed";
 export type AnalysisStatus = "empty" | "uploading" | "ready" | JobStatus;
 
 export interface RasterMetadata {
@@ -34,18 +34,42 @@ export interface InspectionResponse {
     resolution_compatible: boolean | null;
     warnings: string[];
   };
+  visual_quality: {
+    status: "accepted" | "review" | "unsupported";
+    score: number;
+    flags: string[];
+    recommendation: string | null;
+  };
+  registration: {
+    method: string;
+    confidence: number;
+    status: "not_required" | "accepted" | "low_quality";
+    transform: number[] | null;
+    warnings: string[];
+  };
   warnings: string[];
 }
 
 export interface EvidenceItem {
   id: string;
-  type: "mask" | "overlay" | "bounding_box" | "polygon" | "text" | "heatmap";
+  type: "mask" | "overlay" | "bounding_box" | "polygon" | "text" | "heatmap" | "probability_map" | "transition" | "statistic";
   label: string;
   description: string;
   confidence: number | null;
   asset_url: string | null;
   coordinates: number[][] | null;
   color: string;
+  legend: { label: string; color: string; description: string | null }[];
+}
+
+export interface TransitionItem {
+  from_class: string;
+  to_class: string;
+  percent: number;
+  pixel_count: number;
+  area_square_metres: number | null;
+  area_hectares: number | null;
+  area_square_kilometres: number | null;
 }
 
 export interface TraceStep {
@@ -71,6 +95,8 @@ export interface AnalysisResponse {
   };
   evidence: EvidenceItem[];
   statistics: Record<string, string | number>;
+  transitions: TransitionItem[];
+  warnings: string[];
   inspection: InspectionResponse;
   execution_trace: {
     task: string;
@@ -82,6 +108,7 @@ export interface AnalysisResponse {
     runtime_ms: number;
     status: "success" | "failed";
     mock_mode: boolean;
+    warnings: string[];
   };
   runtime_ms: number;
 }
@@ -119,6 +146,8 @@ export interface ModelStatus {
   supported_tasks: string[];
   modalities: string[];
   implementation: string;
+  checkpoint_path: string | null;
+  mode: "real" | "mock" | "baseline" | "disabled";
 }
 
 export interface HistoryItem {

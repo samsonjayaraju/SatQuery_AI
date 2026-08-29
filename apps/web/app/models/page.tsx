@@ -15,7 +15,7 @@ export default function ModelsPage() {
             <article key={model.id}>
               <header><span className="model-icon"><Box size={17} /></span><span className={`model-state ${model.status}`} >{model.status === "ready" ? <Check size={11} /> : <CircleOff size={11} />}{model.status.replaceAll("_", " ")}</span></header>
               <h2>{model.name}</h2><p>{model.id} · {model.version}</p>
-              <dl><div><dt>Implementation</dt><dd>{model.implementation.replaceAll("_", " ")}</dd></div><div><dt>Device</dt><dd>{model.device.toUpperCase()}</dd></div><div><dt>Loaded</dt><dd>{model.loaded ? "Yes" : "Lazy"}</dd></div></dl>
+              <dl><div><dt>Implementation</dt><dd>{model.implementation.replaceAll("_", " ")}</dd></div><div><dt>Mode</dt><dd>{model.mode}</dd></div><div><dt>Device</dt><dd>{model.device.toUpperCase()}</dd></div><div><dt>Loaded</dt><dd>{model.loaded ? "Yes" : "Lazy"}</dd></div><div><dt>Checkpoint</dt><dd title={model.checkpoint_path ?? "Built in"}>{model.checkpoint_path ? model.checkpoint_available ? "Available" : "Missing" : "Built in"}</dd></div></dl>
               <div className="chip-list">{model.supported_tasks.map((task) => <span key={task}>{task.replaceAll("_", " ")}</span>)}</div>
             </article>
           ))}

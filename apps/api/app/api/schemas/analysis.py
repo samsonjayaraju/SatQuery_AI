@@ -38,11 +38,28 @@ class Compatibility(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class VisualQuality(BaseModel):
+    status: Literal["accepted", "review", "unsupported"] = "accepted"
+    score: float = 1.0
+    flags: list[str] = Field(default_factory=list)
+    recommendation: str | None = None
+
+
+class RegistrationInfo(BaseModel):
+    method: str = "not_required"
+    confidence: float = 1.0
+    status: Literal["not_required", "accepted", "low_quality"] = "not_required"
+    transform: list[float] | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
 class InspectionResponse(BaseModel):
     valid: bool
     input_mode: InputMode
     images: list[RasterMetadata]
     compatibility: Compatibility
+    visual_quality: VisualQuality = Field(default_factory=VisualQuality)
+    registration: RegistrationInfo = Field(default_factory=RegistrationInfo)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -60,15 +77,42 @@ class ConfidenceResult(BaseModel):
     note: str
 
 
+class LegendItem(BaseModel):
+    label: str
+    color: str
+    description: str | None = None
+
+
 class EvidenceItem(BaseModel):
     id: str
-    type: Literal["mask", "overlay", "bounding_box", "polygon", "text", "heatmap"]
+    type: Literal[
+        "mask",
+        "overlay",
+        "bounding_box",
+        "polygon",
+        "text",
+        "heatmap",
+        "probability_map",
+        "transition",
+        "statistic",
+    ]
     label: str
     description: str
     confidence: float | None = None
     asset_url: str | None = None
     coordinates: list[list[float]] | None = None
     color: str = "#4fd1c5"
+    legend: list[LegendItem] = Field(default_factory=list)
+
+
+class TransitionItem(BaseModel):
+    from_class: str
+    to_class: str
+    percent: float
+    pixel_count: int
+    area_square_metres: float | None = None
+    area_hectares: float | None = None
+    area_square_kilometres: float | None = None
 
 
 class TraceStep(BaseModel):
@@ -89,6 +133,7 @@ class ExecutionTrace(BaseModel):
     runtime_ms: int
     status: Literal["success", "failed"]
     mock_mode: bool
+    warnings: list[str] = Field(default_factory=list)
 
 
 class AnalysisResponse(BaseModel):
@@ -101,6 +146,8 @@ class AnalysisResponse(BaseModel):
     confidence: ConfidenceResult
     evidence: list[EvidenceItem]
     statistics: dict[str, float | int | str]
+    transitions: list[TransitionItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     inspection: InspectionResponse
     execution_trace: ExecutionTrace
     runtime_ms: int
@@ -108,7 +155,17 @@ class AnalysisResponse(BaseModel):
 
 class AnalysisJob(BaseModel):
     job_id: str
-    status: Literal["queued", "validating", "loading_model", "processing", "integrating", "completed", "failed"]
+    status: Literal[
+        "queued",
+        "validating",
+        "registering",
+        "loading_model",
+        "processing",
+        "postprocessing",
+        "integrating",
+        "completed",
+        "failed",
+    ]
     message: str
     progress: float = 0.0
     created_at: datetime
@@ -129,6 +186,8 @@ class ModelStatus(BaseModel):
     supported_tasks: list[str]
     modalities: list[str]
     implementation: str
+    checkpoint_path: str | None = None
+    mode: Literal["real", "mock", "baseline", "disabled"]
 
 
 class HealthResponse(BaseModel):

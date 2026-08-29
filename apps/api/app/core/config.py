@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     tile_size: int = 512
     tile_overlap: int = 64
     change_threshold: float = 0.20
+    registration_min_confidence: float = 0.55
 
     model_config = SettingsConfigDict(env_file=PROJECT_ROOT / ".env", extra="ignore")
 

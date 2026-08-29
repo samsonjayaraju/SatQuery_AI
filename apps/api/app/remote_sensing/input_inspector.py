@@ -3,12 +3,65 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
-from app.api.schemas.analysis import Compatibility, InspectionResponse, RasterMetadata
+from app.api.schemas.analysis import Compatibility, InspectionResponse, RasterMetadata, VisualQuality
 from app.core.exceptions import SatQueryError
 
 SUPPORTED_EXTENSIONS = {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
+
+
+def _group_count(values: np.ndarray) -> int:
+    indexes = np.flatnonzero(values)
+    if not indexes.size:
+        return 0
+    return int(1 + np.count_nonzero(np.diff(indexes) > 1))
+
+
+def _visual_quality(path: Path, metadata: RasterMetadata) -> VisualQuality:
+    """Reject obvious paper/screenshot composites before remote-sensing inference.
+
+    The detector intentionally uses only high-precision layout signals: several
+    full-width and full-height low-entropy separator bands plus a substantial
+    document-like neutral background. Natural uniform scenes form one region,
+    while multi-panel figures form repeated separator groups.
+    """
+    if metadata.georeferenced:
+        return VisualQuality()
+    try:
+        with Image.open(path) as source:
+            image = source.convert("RGB").resize((256, 256), Image.Resampling.BILINEAR)
+        pixels = np.asarray(image, dtype=np.uint8)
+    except Exception:
+        return VisualQuality(status="review", score=0.6, flags=["quality_check_unavailable"])
+
+    quantized = pixels // 16
+    row_dominance = np.array(
+        [np.unique(row, axis=0, return_counts=True)[1].max() / row.shape[0] for row in quantized]
+    )
+    column_dominance = np.array(
+        [np.unique(column, axis=0, return_counts=True)[1].max() / column.shape[0] for column in np.moveaxis(quantized, 1, 0)]
+    )
+    row_groups = _group_count(row_dominance >= 0.85)
+    column_groups = _group_count(column_dominance >= 0.85)
+    channel_spread = pixels.max(axis=2).astype(np.int16) - pixels.min(axis=2).astype(np.int16)
+    neutral = channel_spread <= 12
+    bright_neutral = neutral & (pixels.mean(axis=2) >= 225)
+    dark_neutral = neutral & (pixels.mean(axis=2) <= 30)
+    document_background = float(np.mean(bright_neutral | dark_neutral))
+
+    if row_groups >= 4 and column_groups >= 2 and document_background >= 0.18:
+        return VisualQuality(
+            status="unsupported",
+            score=0.1,
+            flags=["composite_figure", "repeated_panel_separators", "document_background"],
+            recommendation=(
+                "This appears to be a multi-panel figure, screenshot, or paper graphic rather than one raster scene. "
+                "Upload the original satellite panel separately, or use Change mode with the original Time A and Time B images."
+            ),
+        )
+    return VisualQuality(status="accepted", score=0.9)
 
 
 def _infer_modality(path: Path, band_count: int) -> str:
@@ -99,8 +152,12 @@ def inspect_inputs(paths: list[Path], mode: str, urls: list[str] | None = None) 
 
     urls = urls or [None] * len(paths)
     images = [inspect_raster(path, urls[index]) for index, path in enumerate(paths)]
+    qualities = [_visual_quality(path, metadata) for path, metadata in zip(paths, images)]
+    visual_quality = min(qualities, key=lambda quality: quality.score)
     compatibility = Compatibility()
     warnings: list[str] = []
+    if visual_quality.recommendation:
+        warnings.append(visual_quality.recommendation)
     if len(images) == 2:
         first, second = images
         compatibility.dimensions_match = first.width == second.width and first.height == second.height
@@ -132,7 +189,10 @@ def inspect_inputs(paths: list[Path], mode: str, urls: list[str] | None = None) 
         else:
             compatibility.overlap = None
             compatibility.co_registered = compatibility.dimensions_match
-            warnings.append("Pair has no shared georeferencing; pixel-space alignment will be used.")
+            warnings.append(
+                "These images contain no geographic metadata. Results are based on image-space alignment "
+                "and should not be interpreted as geographic area measurements."
+            )
         if not compatibility.dimensions_match:
             warnings.append("Dimensions differ; the second image will be aligned to the first in pixel space.")
         if compatibility.overlap is not None and compatibility.overlap < 0.1:
@@ -147,9 +207,10 @@ def inspect_inputs(paths: list[Path], mode: str, urls: list[str] | None = None) 
         compatibility.warnings = warnings.copy()
 
     return InspectionResponse(
-        valid=True,
+        valid=visual_quality.status != "unsupported",
         input_mode=mode,
         images=images,
         compatibility=compatibility,
+        visual_quality=visual_quality,
         warnings=warnings,
     )

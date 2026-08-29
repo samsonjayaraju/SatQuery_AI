@@ -2,7 +2,7 @@
 
 ## Runtime surfaces
 
-The Next.js client owns upload selection, raster metadata presentation, Leaflet visualization, assistant interaction and local report opening. The FastAPI server owns all filesystem access, validation, routing, analysis, evidence assets, confidence, history and model status.
+The Next.js client owns upload selection, raster metadata presentation, Leaflet visualization, assistant interaction and local report opening. The FastAPI server owns all filesystem access, validation, routing, analysis, evidence assets, confidence, history and model status. Bi-temporal analysis uses ChangeFormer as structural evidence and combines it with sensor-agnostic appearance change and normalized land-cover transitions so environmental events are not suppressed by the LEVIR building-change domain.
 
 ```mermaid
 sequenceDiagram

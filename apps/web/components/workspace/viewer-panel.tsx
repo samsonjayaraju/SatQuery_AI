@@ -51,6 +51,7 @@ export function ViewerPanel({
   const evidence = result?.evidence[activeEvidence];
   const evidenceUrl = overlayVisible ? assetUrl(evidence?.asset_url) : null;
   const crs = base?.crs ?? "PIXEL SPACE";
+  const pairLabels = current?.input_mode === "cross_modal" ? ["OPTICAL", "SAR"] : ["T1 / BEFORE", "T2 / AFTER"];
 
   return (
     <section className="viewer-panel">
@@ -82,7 +83,7 @@ export function ViewerPanel({
       ) : split && images.length > 1 ? (
         <div className="split-view">
           {images.slice(0, 2).map((image, index) => (
-            <figure key={image.filename}><img src={assetUrl(image.thumbnail_url) ?? ""} alt={image.filename} /><figcaption>{index === 0 ? "T1 / OPTICAL" : "T2 / SAR"} · {image.filename}</figcaption></figure>
+            <figure key={image.filename}><img src={assetUrl(image.thumbnail_url) ?? ""} alt={image.filename} /><figcaption>{pairLabels[index]} · {image.filename}</figcaption></figure>
           ))}
         </div>
       ) : (
@@ -93,6 +94,7 @@ export function ViewerPanel({
             {result && <span><ScanSearch size={13} /> {evidence?.label ?? "Evidence"}</span>}
           </div>
           {result && <label className="opacity-control"><span>Overlay</span><input type="range" min="0" max="100" value={Math.round(overlayOpacity * 100)} onChange={(event) => onOpacity(Number(event.target.value) / 100)} /><b>{Math.round(overlayOpacity * 100)}%</b></label>}
+          {evidence?.legend.length ? <div className="evidence-legend">{evidence.legend.map((item) => <span key={item.label}><i style={{ background: item.color }} />{item.label}</span>)}</div> : null}
         </div>
       )}
       <div className="viewer-status"><div><span>{crs}</span><span>{base ? `${base.width} × ${base.height}` : "ZOOM 1.0×"}</span><span>{evidence ? evidence.type.toUpperCase() : "NO OVERLAY"}</span></div><span>{base?.georeferenced ? "GEOREFERENCED" : "LOCAL PIXEL COORDINATES"}</span></div>

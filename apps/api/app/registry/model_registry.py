@@ -47,9 +47,10 @@ DEFAULT_MODELS = (
 
 
 class ModelRegistry:
-    def __init__(self, model_dir: Path, device: str):
+    def __init__(self, model_dir: Path, device: str, mock_mode: bool = False):
         self.model_dir = model_dir
         self.device = device
+        self.mock_mode = mock_mode
         self._models = {model.id: model for model in DEFAULT_MODELS}
         self._loaded: set[str] = set()
 
@@ -74,6 +75,11 @@ class ModelRegistry:
                     supported_tasks=list(model.tasks),
                     modalities=list(model.modalities),
                     implementation=model.implementation,
+                    checkpoint_path=str((self.model_dir / model.checkpoint).resolve()) if model.checkpoint else None,
+                    mode=(
+                        "disabled" if not model.enabled else "mock" if self.mock_mode else
+                        "real" if model.checkpoint is not None else "baseline"
+                    ),
                 )
             )
         return result

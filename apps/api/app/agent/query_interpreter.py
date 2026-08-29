@@ -25,7 +25,11 @@ class QueryInterpreter:
 
         if input_mode == "bi_temporal":
             if target and any(word in normalized for word in ("increase", "decrease", "changed", "change")):
-                intent = "CHANGE_VQA"
+                intent = {
+                    "water": "WATER_CHANGE",
+                    "vegetation": "VEGETATION_CHANGE",
+                    "built_up": "BUILT_UP_CHANGE",
+                }[target]
                 capabilities = ["change_detection", "land_cover", "change_reasoning"]
             elif any(word in normalized for word in ("describe", "what changed", "compare", "change")):
                 intent = "CHANGE_DESCRIPTION"

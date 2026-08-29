@@ -12,6 +12,8 @@ COLORS = {
     "built_up": (251, 177, 80),
     "change": (245, 95, 114),
     "fused": (82, 224, 196),
+    "bare_land": (202, 164, 108),
+    "agriculture": (187, 221, 86),
 }
 
 
@@ -35,6 +37,27 @@ def heatmap(probability: np.ndarray, path: Path, label: str = "change") -> None:
     output[..., 3] = np.clip(probability * 205, 0, 205).astype(np.uint8)
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(output).save(path)
+
+
+def binary_mask(probability: np.ndarray, path: Path, threshold: float = 0.5, label: str = "change") -> None:
+    color = np.array(COLORS.get(label, COLORS["change"]), dtype=np.uint8)
+    selected = probability >= threshold
+    output = np.zeros((*probability.shape, 4), dtype=np.uint8)
+    output[selected, :3] = color
+    output[selected, 3] = 230
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(output).save(path)
+
+
+def transition_overlay(image: np.ndarray, transition_index: np.ndarray, labels: list[str], path: Path) -> None:
+    """Colour only pixels whose land-cover class changed."""
+    base = image.astype(np.float32)
+    for index, label in enumerate(labels):
+        mask = transition_index == index
+        if np.any(mask):
+            color = np.asarray(COLORS.get(label, COLORS["fused"]), dtype=np.float32)
+            base[mask] = base[mask] * 0.35 + color * 0.65
+    save_image(np.clip(base, 0, 255), path)
 
 
 def bounding_box(probability: np.ndarray, threshold: float = 0.58) -> list[list[float]] | None:
