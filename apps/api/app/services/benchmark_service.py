@@ -10,7 +10,7 @@ DEFAULT_TASKS = (
     {"id": "change_detection", "name": "Change Detection", "dataset": "LEVIR-CD", "expected_metrics": ["iou", "f1", "precision", "recall"]},
     {"id": "change_vqa", "name": "Change VQA", "dataset": "CDVQA", "expected_metrics": ["accuracy", "exact_match"]},
     {"id": "visual_grounding", "name": "Visual Grounding", "dataset": "VRSBench", "expected_metrics": ["iou", "precision", "recall"]},
-    {"id": "domain_adapter", "name": "Domain Adapter", "dataset": "BigEarthNet or configured open dataset", "expected_metrics": ["accuracy", "macro_f1"]},
+    {"id": "domain_adapter", "name": "Domain Adapter", "dataset": "EuroSAT or configured open dataset", "expected_metrics": ["accuracy", "macro_f1"]},
 )
 
 

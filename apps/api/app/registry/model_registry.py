@@ -16,17 +16,32 @@ class ModelDefinition:
     checkpoint: str | None
     implementation: str
     enabled: bool = True
+    required_paths: tuple[str, ...] = ()
 
 
 DEFAULT_MODELS = (
-    ModelDefinition("geochat_vqa", "GeoChat VQA", "interface-v1", ("vqa",), ("optical", "multispectral"), "geochat/model.safetensors", "adapter"),
-    ModelDefinition("geochat_caption", "GeoChat Caption", "interface-v1", ("caption",), ("optical", "multispectral"), "geochat/model.safetensors", "adapter"),
-    ModelDefinition("geochat_grounding", "GeoChat Grounding", "interface-v1", ("grounding",), ("optical",), "geochat/model.safetensors", "adapter"),
+    ModelDefinition("geochat_vqa", "GeoChat VQA", "interface-v1", ("vqa",), ("optical", "multispectral"), "geochat/model.safetensors", "optional_adapter", enabled=False),
+    ModelDefinition("geochat_caption", "GeoChat Caption", "interface-v1", ("caption",), ("optical", "multispectral"), "geochat/model.safetensors", "optional_adapter", enabled=False),
+    ModelDefinition("geochat_grounding", "GeoChat Grounding", "interface-v1", ("grounding",), ("optical",), "geochat/model.safetensors", "optional_adapter", enabled=False),
     ModelDefinition("remoteclip_encoder", "RemoteCLIP RN50", "official-2023", ("embedding", "classification", "vqa", "caption", "grounding"), ("optical", "multispectral"), "remoteclip/RemoteCLIP-RN50.pt", "openclip_adapter"),
     ModelDefinition("satquery_adapter", "SatQuery EuroSAT Adapter", "1.0", ("classification", "embedding"), ("optical", "multispectral"), "satquery-adapter/best.pt", "trained_adapter"),
-    ModelDefinition("changeformer", "ChangeFormer V6 LEVIR", "official-v0.1.0", ("change_detection",), ("bi_temporal",), "changeformer/best_ckpt.pt", "official_adapter"),
+    ModelDefinition(
+        "changeformer",
+        "ChangeFormer V6 LEVIR",
+        "official-v0.1.0",
+        ("change_detection",),
+        ("bi_temporal",),
+        "changeformer/best_ckpt.pt",
+        "official_adapter",
+        required_paths=(
+            "changeformer/source/models/ChangeFormer.py",
+            "changeformer/source/models/ChangeFormerBaseNetworks.py",
+            "changeformer/source/models/help_funcs.py",
+            "changeformer/source/models/pixel_shuffel_up.py",
+        ),
+    ),
     ModelDefinition("landcover_classifier", "Spectral Land-Cover Baseline", "1.0", ("land_cover",), ("optical", "multispectral"), None, "deterministic_baseline"),
-    ModelDefinition("satfusion", "SatFusion", "baseline-v1", ("fusion",), ("optical", "sar"), None, "deterministic_baseline"),
+    ModelDefinition("satfusion", "SatFusion", "1.0", ("fusion",), ("optical", "sar"), None, "weighted_feature_fusion"),
     ModelDefinition("change_reasoner", "Change Reasoner", "1.0", ("change_reasoning",), ("bi_temporal",), None, "deterministic_baseline"),
 )
 
@@ -41,7 +56,9 @@ class ModelRegistry:
     def list(self) -> list[ModelStatus]:
         result = []
         for model in self._models.values():
-            checkpoint_available = model.checkpoint is None or (self.model_dir / model.checkpoint).exists()
+            checkpoint_available = (model.checkpoint is None or (self.model_dir / model.checkpoint).exists()) and all(
+                (self.model_dir / required).exists() for required in model.required_paths
+            )
             status = "ready" if checkpoint_available and model.enabled else "checkpoint_missing"
             if not model.enabled:
                 status = "disabled"

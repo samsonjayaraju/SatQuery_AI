@@ -137,6 +137,7 @@ export interface BenchmarkTask {
   expected_metrics: string[];
   status: "measured" | "not_evaluated";
   result: null | {
+    dataset?: string;
     model?: string;
     split?: string;
     sample_count?: number;

@@ -14,7 +14,9 @@ from app.core.config import get_settings
 from app.core.exceptions import SatQueryError
 from app.core.logging import configure_logging
 from app.models.manager import detect_device
+from app.models.changeformer import ChangeFormerService
 from app.models.remoteclip import RemoteCLIPService
+from app.models.satfusion import SatFusionService
 from app.registry.model_registry import ModelRegistry
 from app.registry.tool_registry import ToolRegistry
 from app.services.analysis_service import AnalysisService
@@ -33,7 +35,9 @@ benchmarks = BenchmarkService(settings.project_root / "evaluation-results")
 model_registry = ModelRegistry(settings.model_dir.resolve(), device)
 tool_registry = ToolRegistry()
 remoteclip = RemoteCLIPService(settings.model_dir.resolve(), device, settings.model_unload_after_request)
-analysis = AnalysisService(settings, model_registry, tool_registry, history, remoteclip)
+changeformer = ChangeFormerService(settings.model_dir.resolve(), device, settings.model_unload_after_request)
+satfusion = SatFusionService()
+analysis = AnalysisService(settings, model_registry, tool_registry, history, remoteclip, changeformer, satfusion)
 jobs = AnalysisJobService()
 
 
@@ -55,6 +59,8 @@ app.state.reports = reports
 app.state.benchmarks = benchmarks
 app.state.model_registry = model_registry
 app.state.tool_registry = tool_registry
+app.state.remoteclip = remoteclip
+app.state.changeformer = changeformer
 app.state.agent = SatQueryAgent(analysis)
 app.state.jobs = jobs
 

@@ -25,6 +25,8 @@ from app.reasoning.confidence_engine import ConfidenceEngine
 from app.registry.model_registry import ModelRegistry
 from app.registry.tool_registry import ToolRegistry
 from app.models.remoteclip import RemoteCLIPService
+from app.models.changeformer import ChangeFormerService
+from app.models.satfusion import SatFusionService
 from app.remote_sensing.input_inspector import inspect_inputs
 from app.remote_sensing.alignment import align_visual_pair
 from app.remote_sensing.preprocessing import (
@@ -33,7 +35,15 @@ from app.remote_sensing.preprocessing import (
     resize_like,
     sar_probabilities,
 )
-from app.remote_sensing.visualization import bounding_box, draw_box, heatmap, overlay_mask, save_image
+from app.remote_sensing.visualization import (
+    bounding_box,
+    draw_box,
+    heatmap,
+    largest_polygon,
+    overlay_mask,
+    retain_largest_component,
+    save_image,
+)
 from app.remote_sensing.tiling import tiled_dict_predict
 from app.services.history_service import HistoryService
 
@@ -49,6 +59,8 @@ class AnalysisService:
         tool_registry: ToolRegistry,
         history: HistoryService,
         remoteclip: RemoteCLIPService | None = None,
+        changeformer: ChangeFormerService | None = None,
+        satfusion: SatFusionService | None = None,
     ):
         self.settings = settings
         self.model_registry = model_registry
@@ -57,6 +69,19 @@ class AnalysisService:
         self.interpreter = QueryInterpreter()
         self.confidence = ConfidenceEngine()
         self.remoteclip = remoteclip
+        self.changeformer = changeformer
+        self.satfusion = satfusion or SatFusionService()
+
+    def release_models(self) -> None:
+        if not self.settings.model_unload_after_request:
+            return
+        if self.remoteclip and self.remoteclip.loaded:
+            self.remoteclip.unload()
+            self.model_registry.mark_loaded("remoteclip_encoder", False)
+            self.model_registry.mark_loaded("satquery_adapter", False)
+        if self.changeformer and self.changeformer.loaded:
+            self.changeformer.unload()
+            self.model_registry.mark_loaded("changeformer", False)
 
     def _step(self, name: str, kind: str, started: float, detail: str) -> TraceStep:
         return TraceStep(
@@ -130,6 +155,8 @@ class AnalysisService:
 
         started = time.perf_counter()
         if progress:
+            if not self.settings.mock_mode:
+                progress("loading_model", "Loading the selected local specialist model")
             progress("processing", f"Executing specialist workflow for {intent.intent}")
         if mode == "bi_temporal":
             answer, stats, evidence, confidence, models, tools, learned = self._change(
@@ -148,7 +175,7 @@ class AnalysisService:
         runtime_ms = max(1, round((time.perf_counter() - total_started) * 1000))
         if progress:
             progress("integrating", "Integrating evidence, confidence, statistics and audit trace")
-        steps.append(TraceStep(name="Evidence integration", kind="system", status="completed", runtime_ms=1, detail="Integrated spatial outputs, statistics and heuristic confidence."))
+        steps.append(TraceStep(name="Evidence integration", kind="system", status="completed", runtime_ms=1, detail="Integrated spatial outputs, statistics and confidence components."))
         trace = ExecutionTrace(
             task=intent.intent,
             input_mode=mode,
@@ -158,7 +185,7 @@ class AnalysisService:
                 "tile_size": self.settings.tile_size,
                 "tile_overlap": self.settings.tile_overlap,
                 "alignment": alignment_method,
-                "change_threshold": self.settings.change_threshold,
+                "change_threshold": stats.get("change_threshold", self.settings.change_threshold),
                 "device": self.model_registry.device,
             },
             steps=steps,
@@ -222,6 +249,10 @@ class AnalysisService:
 
         overlay_name = f"{primary}-overlay.png"
         threshold = thresholds.get(primary, 0.32)
+        if intent == "REGION_GROUNDING":
+            if not np.any(probability >= threshold):
+                threshold = max(float(probability.max()) * 0.9, 1e-6)
+            probability = retain_largest_component(probability, threshold)
         overlay_mask(image, probability, output / overlay_name, primary, threshold)
         evidence.append(
             EvidenceItem(
@@ -234,9 +265,7 @@ class AnalysisService:
                 color="#4fd1c5",
             )
         )
-        if learned_answer:
-            answer = learned_answer.answer
-        elif intent == "REGION_GROUNDING":
+        if intent == "REGION_GROUNDING":
             coordinates = bounding_box(probability, threshold)
             if coordinates:
                 box_name = f"{primary}-grounding.png"
@@ -255,12 +284,15 @@ class AnalysisService:
                     ),
                 )
         dominant = ", ".join(label.replace("_percent", "").replace("_", " ") for label, _ in ranked[:3])
-        if intent == "REGION_GROUNDING":
+        if learned_answer is not None:
+            answer = learned_answer.answer
+        elif intent == "REGION_GROUNDING":
             answer = f"The strongest {primary.replace('_', ' ')} candidate region is highlighted. The box covers the spatial extent of pixels passing the evidence threshold."
         elif intent in {"WATER_ANALYSIS", "VEGETATION_ANALYSIS", "BUILT_UP_ANALYSIS"}:
             answer = f"Approximately {stats[f'{primary}_percent']:.1f}% of the scene passes the {primary.replace('_', ' ')} evidence threshold. Review the overlay before treating this as a land-cover map."
         else:
-            answer = f"The scene is primarily characterized by {dominant}. The deterministic baseline estimates {stats['vegetation_percent']:.1f}% vegetation, {stats['built_up_percent']:.1f}% built-up evidence and {stats['water_percent']:.1f}% water evidence."
+            source = "learned RemoteCLIP evidence" if learned else "the deterministic baseline"
+            answer = f"The scene is primarily characterized by {dominant}. {source.capitalize()} estimates {stats['vegetation_percent']:.1f}% vegetation, {stats['built_up_percent']:.1f}% built-up evidence and {stats['water_percent']:.1f}% water evidence."
         confidence = self.confidence.from_probability(probability, threshold, learned=learned)
         models = [learned_landcover_model]
         if learned and intent in {"SINGLE_IMAGE_VQA", "IMAGE_CAPTION", "REGION_GROUNDING"}:
@@ -276,21 +308,46 @@ class AnalysisService:
 
     def _change(self, before: np.ndarray, after: np.ndarray, analysis_id: str, target: str | None):
         after = resize_like(after, before)
-        before_float = before.astype(np.float32) / 255.0
-        after_float = after.astype(np.float32) / 255.0
-        raw = np.mean(np.abs(after_float - before_float), axis=2)
-        high = max(float(np.percentile(raw, 98)), 0.08)
-        probability = np.clip(raw / high, 0, 1)
-        before_classes = tiled_dict_predict(before, optical_probabilities, self.settings.tile_size, self.settings.tile_overlap)
-        after_classes = tiled_dict_predict(after, optical_probabilities, self.settings.tile_size, self.settings.tile_overlap)
+        learned = bool(not self.settings.mock_mode and self.changeformer and self.changeformer.available)
+        if not learned and not self.settings.mock_mode:
+            raise SatQueryError(
+                "MODEL_UNAVAILABLE",
+                "ChangeFormer V6 and its official source are required for bi-temporal analysis when MOCK_MODE=false.",
+                503,
+            )
+        if learned:
+            probability = self.changeformer.predict(before, after)
+            self.model_registry.mark_loaded("changeformer")
+            change_threshold = 0.5
+        else:
+            before_float = before.astype(np.float32) / 255.0
+            after_float = after.astype(np.float32) / 255.0
+            raw = np.mean(np.abs(after_float - before_float), axis=2)
+            high = max(float(np.percentile(raw, 98)), 0.08)
+            probability = np.clip(raw / high, 0, 1)
+            change_threshold = self.settings.change_threshold
+        learned_landcover = bool(not self.settings.mock_mode and self.remoteclip and self.remoteclip.available)
+        if learned_landcover:
+            before_classes, landcover_model = self.remoteclip.landcover_probabilities(before)
+            after_classes, _ = self.remoteclip.landcover_probabilities(after)
+            self.model_registry.mark_loaded("remoteclip_encoder")
+            if self.remoteclip.adapter_available:
+                self.model_registry.mark_loaded("satquery_adapter")
+            class_thresholds = {label: 0.32 for label in before_classes}
+        else:
+            before_classes = tiled_dict_predict(before, optical_probabilities, self.settings.tile_size, self.settings.tile_overlap)
+            after_classes = tiled_dict_predict(after, optical_probabilities, self.settings.tile_size, self.settings.tile_overlap)
+            landcover_model = "Spectral Land-Cover Baseline v1"
+            class_thresholds = CLASS_THRESHOLDS
         stats: dict[str, float] = {
-            "changed_area_percent": self._coverage(probability, self.settings.change_threshold),
-            "built_up_before_percent": self._coverage(before_classes["built_up"], CLASS_THRESHOLDS["built_up"]),
-            "built_up_after_percent": self._coverage(after_classes["built_up"], CLASS_THRESHOLDS["built_up"]),
-            "vegetation_before_percent": self._coverage(before_classes["vegetation"]),
-            "vegetation_after_percent": self._coverage(after_classes["vegetation"]),
-            "water_before_percent": self._coverage(before_classes["water"]),
-            "water_after_percent": self._coverage(after_classes["water"]),
+            "changed_area_percent": self._coverage(probability, change_threshold),
+            "change_threshold": change_threshold,
+            "built_up_before_percent": self._coverage(before_classes["built_up"], class_thresholds["built_up"]),
+            "built_up_after_percent": self._coverage(after_classes["built_up"], class_thresholds["built_up"]),
+            "vegetation_before_percent": self._coverage(before_classes["vegetation"], class_thresholds["vegetation"]),
+            "vegetation_after_percent": self._coverage(after_classes["vegetation"], class_thresholds["vegetation"]),
+            "water_before_percent": self._coverage(before_classes["water"], class_thresholds["water"]),
+            "water_after_percent": self._coverage(after_classes["water"], class_thresholds["water"]),
         }
         stats["built_up_change_pp"] = round(stats["built_up_after_percent"] - stats["built_up_before_percent"], 2)
         stats["vegetation_change_pp"] = round(stats["vegetation_after_percent"] - stats["vegetation_before_percent"], 2)
@@ -298,16 +355,36 @@ class AnalysisService:
         output = self.settings.data_dir.resolve() / "outputs" / analysis_id
         overlay_name = "change-overlay.png"
         heatmap(probability, output / "change-heatmap.png")
-        overlay_mask(after, probability, output / overlay_name, "change", self.settings.change_threshold)
-        coordinates = bounding_box(probability, self.settings.change_threshold)
+        overlay_mask(after, probability, output / overlay_name, "change", change_threshold)
+        coordinates = bounding_box(probability, change_threshold)
+        polygon = largest_polygon(probability, change_threshold)
+        evidence_description = (
+            "Official ChangeFormer V6 LEVIR change probabilities overlaid on the aligned T2 image."
+            if learned
+            else "Pixels with material before/after spectral difference overlaid on T2."
+        )
         evidence = [
-            EvidenceItem(id="change-overlay", type="overlay", label="Change overlay", description="Pixels with material before/after spectral difference overlaid on T2.", confidence=round(float(probability.mean()), 3), asset_url=self._asset_url(analysis_id, overlay_name), coordinates=coordinates, color="#f55f72"),
-            EvidenceItem(id="change-heatmap", type="heatmap", label="Change probability", description="Transparent change-evidence heatmap generated from normalized pixel differences.", confidence=round(float(probability.mean()), 3), asset_url=self._asset_url(analysis_id, "change-heatmap.png"), color="#f55f72"),
+            EvidenceItem(id="change-overlay", type="overlay", label="Change overlay", description=evidence_description, confidence=round(float(probability.mean()), 3), asset_url=self._asset_url(analysis_id, overlay_name), coordinates=coordinates, color="#f55f72"),
+            EvidenceItem(id="change-heatmap", type="heatmap", label="Change probability", description=("Learned ChangeFormer probability heatmap." if learned else "Transparent change-evidence heatmap generated from normalized pixel differences."), confidence=round(float(probability.mean()), 3), asset_url=self._asset_url(analysis_id, "change-heatmap.png"), color="#f55f72"),
         ]
-        answer = explain_change(stats, target)
-        confidence = self.confidence.from_probability(probability, self.settings.change_threshold, spatial_quality=0.78)
+        if polygon:
+            evidence.append(
+                EvidenceItem(
+                    id="largest-change-polygon",
+                    type="polygon",
+                    label="Largest changed region",
+                    description="Normalized outline of the largest connected change region.",
+                    confidence=round(float(probability[probability >= change_threshold].mean()), 3),
+                    asset_url=self._asset_url(analysis_id, overlay_name),
+                    coordinates=polygon,
+                    color="#f0b45b",
+                )
+            )
+        answer = explain_change(stats, target, learned=learned)
+        confidence = self.confidence.from_probability(probability, change_threshold, spatial_quality=0.78, learned=learned)
         tools = self.tool_registry.names_for(["change_detection", "overlay_generation", "statistics", "confidence"])
-        return answer, stats, evidence, confidence, ["Pixel Change Baseline v1", "Spectral Land-Cover Baseline v1", "Change Reasoner v1"], tools, False
+        change_model = "ChangeFormer V6 LEVIR official-v0.1.0" if learned else "Pixel Change Baseline v1"
+        return answer, stats, evidence, confidence, [change_model, landcover_model, "Change Reasoner v1"], tools, learned
 
     def _cross_modal(self, optical: np.ndarray, sar: np.ndarray, analysis_id: str, target: str | None):
         sar = resize_like(sar, optical)
@@ -325,8 +402,9 @@ class AnalysisService:
         fusion_threshold = 0.32 if learned else CLASS_THRESHOLDS[primary]
         optical_probability = optical_scores[primary]
         sar_probability = sar_scores[primary]
-        fused = np.clip(optical_probability * 0.46 + sar_probability * 0.54, 0, 1)
-        agreement = float(1 - np.mean(np.abs(optical_probability - sar_probability)))
+        fusion = self.satfusion.predict(optical_probability, sar_probability, sar_scores["texture"])
+        fused = fusion.probability
+        agreement = fusion.agreement
         stats = {
             "target_class": primary,
             "optical_evidence_percent": self._coverage(optical_probability, fusion_threshold),
@@ -336,6 +414,8 @@ class AnalysisService:
             "optical_mean_probability": round(float(optical_probability.mean()), 3),
             "sar_mean_probability": round(float(sar_probability.mean()), 3),
             "fused_mean_probability": round(float(fused.mean()), 3),
+            "optical_fusion_weight": round(fusion.optical_weight, 3),
+            "sar_fusion_weight": round(fusion.sar_weight, 3),
         }
         output = self.settings.data_dir.resolve() / "outputs" / analysis_id
         items = []
@@ -353,4 +433,4 @@ class AnalysisService:
         )
         confidence = self.confidence.from_probability(fused, fusion_threshold, agreement=agreement, spatial_quality=0.8, learned=learned)
         tools = self.tool_registry.names_for(["optical_analysis", "sar_analysis", "satfusion", "overlay_generation", "confidence"])
-        return answer, stats, items, confidence, [optical_model, "SAR Backscatter Baseline v1", "SatFusion Concatenation Baseline v1"], tools, learned
+        return answer, stats, items, confidence, [optical_model, "SAR Backscatter + Texture Features v1", self.satfusion.model_name], tools, learned

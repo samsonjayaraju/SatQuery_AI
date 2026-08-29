@@ -22,9 +22,7 @@ class FrozenRemoteCLIPEncoder(nn.Module):
         super().__init__()
         import open_clip
 
-        self.encoder = open_clip.create_model(model_name)
-        state = torch.load(checkpoint, map_location="cpu", weights_only=True)
-        self.encoder.load_state_dict(state)
+        self.encoder = open_clip.create_model(model_name, pretrained=checkpoint)
         self.output_dim = self.encoder.visual.output_dim
         self.encoder.requires_grad_(False)
         self.encoder.eval()

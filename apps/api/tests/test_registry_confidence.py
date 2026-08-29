@@ -8,8 +8,22 @@ from app.registry.model_registry import ModelRegistry
 
 def test_registry_does_not_claim_missing_checkpoint(tmp_path: Path):
     models = {model.id: model for model in ModelRegistry(tmp_path, "cpu").list()}
-    assert models["geochat_vqa"].status == "checkpoint_missing"
+    assert models["geochat_vqa"].status == "disabled"
     assert models["landcover_classifier"].status == "ready"
+
+
+def test_changeformer_requires_checkpoint_and_official_source(tmp_path: Path):
+    checkpoint = tmp_path / "changeformer" / "best_ckpt.pt"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.touch()
+    models = {model.id: model for model in ModelRegistry(tmp_path, "cpu").list()}
+    assert models["changeformer"].status == "checkpoint_missing"
+    source_directory = tmp_path / "changeformer" / "source" / "models"
+    source_directory.mkdir(parents=True)
+    for name in ("ChangeFormer.py", "ChangeFormerBaseNetworks.py", "help_funcs.py", "pixel_shuffel_up.py"):
+        (source_directory / name).touch()
+    models = {model.id: model for model in ModelRegistry(tmp_path, "cpu").list()}
+    assert models["changeformer"].status == "ready"
 
 
 def test_confidence_is_derived_from_components():

@@ -102,9 +102,7 @@ class RemoteCLIPService:
             raise FileNotFoundError(f"RemoteCLIP checkpoint missing: {self.checkpoint}")
         import open_clip
 
-        model, _, preprocess = open_clip.create_model_and_transforms("RN50")
-        state = torch.load(self.checkpoint, map_location="cpu", weights_only=True)
-        model.load_state_dict(state)
+        model, _, preprocess = open_clip.create_model_and_transforms("RN50", pretrained=str(self.checkpoint))
         model.requires_grad_(False).eval().to(self.device)
         self.model = model
         self.preprocess = preprocess
@@ -127,11 +125,33 @@ class RemoteCLIPService:
         elif self.device == "cuda":
             torch.cuda.empty_cache()
 
+    def health(self) -> dict[str, object]:
+        return {
+            "ready": self.available,
+            "loaded": self.loaded,
+            "adapter_ready": self.adapter_available,
+            "device": self.device,
+        }
+
+    def metadata(self) -> dict[str, object]:
+        return {
+            "id": "remoteclip_encoder",
+            "name": self.model_name,
+            "version": "official-2023",
+            "tasks": ["embedding", "classification", "vqa", "caption", "grounding"],
+        }
+
     @staticmethod
     def _pil(image: np.ndarray) -> Image.Image:
         return Image.fromarray(image.astype(np.uint8))
 
-    def _image_features(self, images: list[np.ndarray], batch_size: int = 24) -> torch.Tensor:
+    def _image_features(
+        self,
+        images: list[np.ndarray],
+        batch_size: int = 24,
+        *,
+        normalize: bool = True,
+    ) -> torch.Tensor:
         self.load()
         assert self.model is not None and self.preprocess is not None
         outputs = []
@@ -139,7 +159,9 @@ class RemoteCLIPService:
             for start in range(0, len(images), batch_size):
                 pixels = torch.stack([self.preprocess(self._pil(image)) for image in images[start : start + batch_size]]).to(self.device)
                 features = self.model.encode_image(pixels)
-                outputs.append(features / features.norm(dim=-1, keepdim=True).clamp_min(1e-8))
+                if normalize:
+                    features = features / features.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+                outputs.append(features)
         return torch.cat(outputs)
 
     def _text_features(self, prompts: list[str]) -> torch.Tensor:
@@ -172,7 +194,7 @@ class RemoteCLIPService:
 
     def landcover_probabilities(self, image: np.ndarray) -> tuple[dict[str, np.ndarray], str]:
         windows, patches = self._patches(image)
-        image_features = self._image_features(patches)
+        image_features = self._image_features(patches, normalize=self.adapter is None)
         if self.adapter is not None:
             with torch.inference_mode():
                 class_scores = self.adapter(image_features).softmax(dim=-1).detach().cpu().numpy()

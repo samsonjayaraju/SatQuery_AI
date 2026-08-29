@@ -2,14 +2,14 @@
 
 | ID | Role | Default state |
 | --- | --- | --- |
-| `geochat_vqa` | Remote-sensing VQA | checkpoint missing |
-| `geochat_caption` | Scene captioning | checkpoint missing |
-| `geochat_grounding` | Text-guided localization | checkpoint missing |
-| `remoteclip_encoder` | Image/text embedding | checkpoint missing |
-| `satquery_adapter` | BigEarthNet-adapted projection/head | checkpoint missing |
-| `changeformer` | Bi-temporal change probability | checkpoint missing |
+| `geochat_vqa` | Optional replacement remote-sensing VQA | disabled |
+| `geochat_caption` | Optional replacement scene captioning | disabled |
+| `geochat_grounding` | Optional replacement text-guided localization | disabled |
+| `remoteclip_encoder` | RemoteCLIP image/text embedding, VQA, captioning and grounding | checkpoint detected at runtime |
+| `satquery_adapter` | EuroSAT-adapted residual projection/head | checkpoint detected at runtime |
+| `changeformer` | Bi-temporal change probability | checkpoint and source detected at runtime |
 | `landcover_classifier` | Spectral deterministic baseline | ready |
-| `satfusion` | Optical/SAR weighted fusion baseline | ready |
+| `satfusion` | Optical/SAR gated weighted-feature fusion | ready |
 | `change_reasoner` | Structured change explanation | ready |
 
-Routes never pretend a missing checkpoint executed. Replace an adapter behind `BaseModelAdapter`; the agent, API and frontend contracts remain unchanged.
+ChangeFormer is ready only when both `best_ckpt.pt` and the official source module are present. Routes never pretend a missing checkpoint executed. GeoChat stays optional because RemoteCLIP provides the active lightweight remote-sensing VLM implementation. Model services expose lazy load/unload, health and metadata boundaries, so replacements do not change the agent, API or frontend contracts.

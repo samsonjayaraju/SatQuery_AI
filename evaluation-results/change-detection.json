@@ -1,0 +1,20 @@
+{
+  "task_id": "change_detection",
+  "dataset": "LEVIR-CD official ChangeFormer demo samples",
+  "model": "ChangeFormer V6 LEVIR official-v0.1.0",
+  "split": "official demo list",
+  "sample_count": 7,
+  "created_at": "2026-08-29T06:54:43.066715+00:00",
+  "checkpoint": "models/changeformer/best_ckpt.pt",
+  "parameters": {
+    "threshold": 0.5,
+    "tile_size": 256
+  },
+  "metrics": {
+    "iou": 0.8390817554264921,
+    "f1": 0.9081474009220398,
+    "precision": 0.9143558272679719,
+    "recall": 0.9042241364256408,
+    "overall_accuracy": 0.9665788922991071
+  }
+}

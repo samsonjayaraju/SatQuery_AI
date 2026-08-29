@@ -50,6 +50,48 @@ def bounding_box(probability: np.ndarray, threshold: float = 0.58) -> list[list[
     ]
 
 
+def retain_largest_component(probability: np.ndarray, threshold: float) -> np.ndarray:
+    from skimage.measure import label
+
+    components = label(probability >= threshold, connectivity=2)
+    identifiers, counts = np.unique(components[components > 0], return_counts=True)
+    if not len(identifiers):
+        return probability
+    largest = identifiers[int(counts.argmax())]
+    return np.where(components == largest, probability, 0.0).astype(np.float32)
+
+
+def largest_polygon(
+    probability: np.ndarray,
+    threshold: float = 0.58,
+    max_points: int = 48,
+) -> list[list[float]] | None:
+    from skimage.measure import find_contours
+
+    mask = probability >= threshold
+    if not mask.any():
+        return None
+    contours = find_contours(np.pad(mask.astype(np.uint8), 1), 0.5)
+    if not contours:
+        return None
+    contour = max(contours, key=len) - 1
+    if len(contour) < 3:
+        return None
+    step = max(1, int(np.ceil(len(contour) / max_points)))
+    sampled = contour[::step]
+    height, width = probability.shape
+    coordinates = [
+        [
+            round(float(np.clip(x, 0, width - 1)) / max(width - 1, 1), 4),
+            round(float(np.clip(y, 0, height - 1)) / max(height - 1, 1), 4),
+        ]
+        for y, x in sampled
+    ]
+    if coordinates[0] != coordinates[-1]:
+        coordinates.append(coordinates[0])
+    return coordinates
+
+
 def draw_box(image: np.ndarray, coordinates: list[list[float]], path: Path, label: str) -> None:
     canvas = Image.fromarray(image).convert("RGB")
     draw = ImageDraw.Draw(canvas)

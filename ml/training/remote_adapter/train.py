@@ -95,7 +95,7 @@ def run_epoch(model, loader, loss_fn, device, optimizer=None, features_cached=Fa
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train the SatQuery Remote-Sensing Adapter on a BigEarthNet manifest.")
+    parser = argparse.ArgumentParser(description="Train the SatQuery Remote-Sensing Adapter on an open remote-sensing manifest.")
     parser.add_argument("--config", default=str(Path(__file__).with_name("config.yaml")))
     parser.add_argument("--dataset-path")
     parser.add_argument("--manifest")
@@ -164,6 +164,15 @@ def main() -> None:
         "split": f"deterministic validation ({config.validation_split:.0%}, seed {config.seed})",
         "sample_count": validation_size,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "checkpoint": str(output / "best.pt"),
+        "parameters": {
+            "training_samples": len(dataset) - validation_size,
+            "epochs": config.epochs,
+            "batch_size": config.batch_size,
+            "learning_rate": config.learning_rate,
+            "bottleneck_dim": config.bottleneck_dim,
+            "seed": config.seed,
+        },
         "metrics": {
             "accuracy": best["validation"]["accuracy"],
             "macro_f1": best["validation"]["macro_f1"],

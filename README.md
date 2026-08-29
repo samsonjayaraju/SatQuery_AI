@@ -4,7 +4,7 @@ SatQuery AI is a local-first, sensor-aware assistant for remote-sensing image an
 
 Built for Smart India Hackathon / ISRO–Department of Space problem statement **26167**.
 
-> Research prototype: the included deterministic baselines make the entire workflow demoable without downloading large checkpoints. Learned-model fallbacks are always labeled **Development Mock Result** and benchmark pages never show invented scores.
+> Research prototype: the application supports real local RemoteCLIP, a trained EuroSAT adapter, and official ChangeFormer inference when their ignored checkpoints are installed. Deterministic fallbacks remain available through `MOCK_MODE=true`, are always labeled **Development Mock Result**, and benchmark pages never show invented scores.
 
 ## What works now
 
@@ -13,15 +13,16 @@ Built for Smart India Hackathon / ISRO–Department of Space problem statement *
 - PNG/JPEG benchmark-image support with explicit pixel-space labeling.
 - Rule-based query interpretation across the 14 specified intents.
 - Central model and tool registries with checkpoint status and device reporting.
-- Single-scene caption/VQA/grounding development flow backed by real pixel-derived land-cover evidence.
-- Bi-temporal pixel-change heatmap, overlay, class deltas and structured change reasoning.
-- Optical and SAR evidence extraction plus weighted SatFusion baseline and agreement confidence.
+- Learned RemoteCLIP RN50 scene captioning, query answering and patch-level grounding.
+- A trained residual adapter over frozen RemoteCLIP features using 5,000 balanced EuroSAT RGB samples.
+- Official ChangeFormer V6 LEVIR inference with tiled probability maps, overlays, largest-region polygons, class deltas and structured change reasoning.
+- Learned optical evidence plus SAR backscatter/texture extraction and a replaceable weighted SatFusion baseline.
 - Full-resolution overlapping tile inference with stitched outputs; browser previews are downsampled separately.
 - GeoTIFF pair reprojection onto a shared grid, with an explicit pixel-space fallback for unreferenced images.
 - Non-blocking local analysis jobs with progress polling and all required job states.
 - Leaflet `CRS.Simple` viewer with zoom, pan, fit, pair split/swipe, evidence selection, overlay toggle and opacity.
 - Local JSON history, HTML report generation, health/models/history/job/benchmark routes.
-- Frozen RemoteCLIP + trainable bottleneck adapter pipeline for BigEarthNet subsets.
+- Frozen RemoteCLIP + trainable bottleneck adapter pipeline for EuroSAT or manifest-backed BigEarthNet subsets.
 - Reusable evaluation metrics and deterministic synthetic demo imagery generator.
 
 ## Architecture
@@ -92,24 +93,40 @@ Then demonstrate:
 2. `demo/change/t1.png` + `t2.png` → “Has the built-up area increased?”
 3. `demo/cross_modal/optical.png` + `sar.png` → “Use both sensors to identify water-covered areas.”
 
-The classical outputs are genuine computations over those pixels. GeoChat, RemoteCLIP and ChangeFormer entries remain `checkpoint_missing` until configured.
+With `MOCK_MODE=true`, the classical outputs are genuine computations over those pixels and carry the development label. After model setup, set `MOCK_MODE=false` to run RemoteCLIP, the trained adapter and ChangeFormer locally. GeoChat remains an optional interchangeable VLM rather than a runtime dependency.
 
 ## Model checkpoints
 
-Large files are ignored. Place local checkpoints as documented in [models/README.md](models/README.md). The model manager supports CPU/CUDA/MPS selection, lazy interfaces and post-request memory cleanup.
+Large files are ignored. Run `scripts/setup_local_models.sh` or place checkpoints manually as documented in [models/README.md](models/README.md). The model layer supports CPU/CUDA/MPS selection, lazy loading and post-request memory cleanup.
 
 ## Domain adaptation
 
-The `ml/training/remote_adapter` pipeline freezes a local RemoteCLIP/CLIP-compatible vision encoder and trains only a residual bottleneck adapter plus multi-label head on a user-provided BigEarthNet subset.
+The `ml/training/remote_adapter` pipeline freezes RemoteCLIP RN50 and trains only a residual bottleneck adapter plus classification head. The included preparation flow uses the open EuroSAT RGB dataset; the same JSONL manifest contract also supports BigEarthNet subsets.
 
 ```bash
-python ml/training/remote_adapter/train.py \
-  --dataset-path datasets/BigEarthNet-S2 \
-  --epochs 8 --batch-size 24 --device auto \
+.venv/bin/python scripts/prepare_eurosat_manifest.py --max-samples 5000
+.venv/bin/python ml/training/remote_adapter/train.py \
+  --dataset-path datasets/EuroSAT_RGB \
+  --epochs 5 --batch-size 32 --device auto \
   --output-dir ml/training/outputs/satquery-adapter
+mkdir -p models/satquery-adapter
+cp ml/training/outputs/satquery-adapter/best.pt models/satquery-adapter/best.pt
 ```
 
-It writes `best.pt`, `latest.pt`, configuration, and measured training/validation metrics. Use `encoder_backend: spectral` only to smoke-test plumbing; it is not a substitute for the required RemoteCLIP adaptation run. See [docs/dataset-setup.md](docs/dataset-setup.md).
+The completed 5,000-sample run produced a measured 750-image holdout result of **89.7% accuracy** and **89.5% macro-F1**. These values come from `evaluation-results/domain-adapter.json`; they are not hard-coded UI data. Use `encoder_backend: spectral` only to smoke-test plumbing. See [docs/dataset-setup.md](docs/dataset-setup.md).
+
+## Measured evaluation
+
+The repository currently contains two local evaluation records:
+
+- EuroSAT adapter: 750-image deterministic holdout from the 5,000-sample training manifest.
+- ChangeFormer: seven official LEVIR-CD demo pairs bundled with the upstream ChangeFormer source; this is a smoke benchmark, not a full-dataset claim.
+
+Re-run ChangeFormer evaluation with:
+
+```bash
+.venv/bin/python ml/evaluation/evaluate_changeformer.py --device auto
+```
 
 ## Tests and builds
 

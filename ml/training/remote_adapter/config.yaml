@@ -1,10 +1,10 @@
-dataset_path: datasets/BigEarthNet-S2
-manifest: datasets/BigEarthNet-S2/samples.jsonl
+dataset_path: datasets/EuroSAT_RGB
+manifest: datasets/EuroSAT_RGB/samples.jsonl
 encoder_backend: remoteclip
 encoder_path: models/remoteclip/RemoteCLIP-RN50.pt
 encoder_model: RN50
-epochs: 8
-batch_size: 24
+epochs: 5
+batch_size: 32
 learning_rate: 0.0003
 weight_decay: 0.0001
 bottleneck_dim: 256

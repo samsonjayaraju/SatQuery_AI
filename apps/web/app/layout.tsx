@@ -14,8 +14,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: "SatQuery AI · Remote-Sensing Analysis",
   description: "A local-first, sensor-aware vision-language workspace for satellite image analysis.",
+  openGraph: {
+    title: "SatQuery AI · Remote-Sensing Analysis",
+    description: "A local-first, sensor-aware vision-language workspace for satellite image analysis.",
+    type: "website",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "SatQuery AI sensor-aware remote-sensing analysis" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SatQuery AI · Remote-Sensing Analysis",
+    description: "A local-first, sensor-aware vision-language workspace for satellite image analysis.",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -20,4 +20,7 @@ class SatQueryAgent:
         input_mode: str,
         progress: Callable[[str, str], None] | None = None,
     ) -> AnalysisResponse:
-        return self.analysis_service.analyze(paths, query, input_mode, progress)
+        try:
+            return self.analysis_service.analyze(paths, query, input_mode, progress)
+        finally:
+            self.analysis_service.release_models()
