@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantPanel } from "./assistant-panel";
 
@@ -10,6 +10,8 @@ const callbacks = {
   onEvidence: vi.fn(),
   onReport: vi.fn(),
 };
+
+afterEach(cleanup);
 
 describe("AssistantPanel", () => {
   it("shows real queued-job progress and disables duplicate submission", () => {
@@ -60,5 +62,47 @@ describe("AssistantPanel", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /what changed between these two dates/i }));
     expect(callbacks.onQuery).toHaveBeenCalledWith("What changed between these two dates?");
+  });
+
+  it("keeps the query field reachable before imagery is loaded", () => {
+    render(
+      <AssistantPanel
+        mode="single"
+        status="empty"
+        job={null}
+        query=""
+        result={null}
+        activeEvidence={0}
+        canAnalyze={false}
+        reportBusy={false}
+        {...callbacks}
+      />,
+    );
+
+    expect(screen.getByLabelText("Analysis question")).toBeEnabled();
+    expect(screen.getByRole("button", { name: /analyze/i })).toBeDisabled();
+  });
+
+  it("allows typing a Fusion query while the image pair is validating", () => {
+    callbacks.onQuery.mockClear();
+    render(
+      <AssistantPanel
+        mode="cross_modal"
+        status="validating"
+        job={null}
+        query=""
+        result={null}
+        activeEvidence={0}
+        canAnalyze={false}
+        reportBusy={false}
+        {...callbacks}
+      />,
+    );
+
+    const queryField = screen.getByLabelText("Analysis question");
+    expect(queryField).toBeEnabled();
+    fireEvent.change(queryField, { target: { value: "Where do optical and SAR evidence agree?" } });
+    expect(callbacks.onQuery).toHaveBeenCalledWith("Where do optical and SAR evidence agree?");
+    expect(screen.getByRole("button", { name: /analyze/i })).toBeDisabled();
   });
 });

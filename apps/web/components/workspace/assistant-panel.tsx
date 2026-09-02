@@ -68,6 +68,7 @@ export function AssistantPanel({
   onReport: () => void;
 }) {
   const busy = ["queued", "validating", "registering", "loading_model", "processing", "postprocessing", "integrating"].includes(status);
+  const queryLocked = ["queued", "registering", "loading_model", "processing", "postprocessing", "integrating"].includes(status);
   function submit(event: FormEvent) {
     event.preventDefault();
     onAnalyze();
@@ -145,7 +146,13 @@ export function AssistantPanel({
       )}
 
       <form className="query-composer" onSubmit={submit}>
-        <textarea aria-label="Analysis question" placeholder={canAnalyze ? "Ask a question about the imagery…" : "Load valid imagery to begin…"} value={query} onChange={(event) => onQuery(event.target.value)} disabled={!canAnalyze || busy} />
+        <textarea
+          aria-label="Analysis question"
+          placeholder={canAnalyze ? "Ask a question about the imagery…" : "Type your question, then load valid imagery…"}
+          value={query}
+          onChange={(event) => onQuery(event.target.value)}
+          disabled={queryLocked}
+        />
         <div><span><Sparkles size={13} /> Automatic routing</span><button type="submit" disabled={!canAnalyze || !query.trim() || busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MessageSquareText size={16} />} Analyze</button></div>
       </form>
     </aside>
